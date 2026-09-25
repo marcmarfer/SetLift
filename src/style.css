@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+:root {
+  --c-bg: #f0f1f3;
+  --c-surface: #ffffff;
+  --c-surface-2: #f2f3f5;
+  --c-border: #eaebef;
+  --c-border-btn: #e6e8ec;
+  --c-text: #14171c;
+  --c-muted: #5a6270;
+  --c-dim: #6b7280;
+  --c-faint: #8a909b;
+  --c-line: #71798a;
+  --c-icon: #9ba1ab;
+  --c-accent: #ff6a2b;
+  --c-accent-soft: #fff0e7;
+  --c-accent-border: #ffd8c2;
+  --c-accent-text: #b0481a;
+  --c-green: #17a05c;
+  --c-green-soft: #e9f7ef;
+  --c-green-border: #bfe6cf;
+  --c-green-ink: #ffffff;
+  --c-amber: #c2410c;
+  --c-amber-soft: #fff1e8;
+  --c-down: #6b7280;
+  --c-danger: #d93a2b;
+  --c-hero: #16191e;
+  --c-hero-text: #ffffff;
+  --c-hero-muted: #9ba3af;
+  --c-hero-surface: #262b32;
+  --c-hero-line: #3a414a;
+  --c-shadow: 0 8px 20px rgba(16, 20, 26, 0.06);
+  --c-shadow-hero: 0 16px 34px rgba(16, 20, 26, 0.2);
+}
+
+:root[data-theme='dark'] {
+  --c-bg: #0e1013;
+  --c-surface: #16191e;
+  --c-surface-2: #1d2127;
+  --c-border: #232830;
+  --c-border-btn: #2b313a;
+  --c-text: #eff1f4;
+  --c-muted: #9aa2ae;
+  --c-dim: #6e7682;
+  --c-faint: #656d79;
+  --c-line: #7b8391;
+  --c-icon: #4e5662;
+  --c-accent: #ff7a3d;
+  --c-accent-soft: #2a1a11;
+  --c-accent-border: #4a2c18;
+  --c-accent-text: #ffb183;
+  --c-green: #35d08a;
+  --c-green-soft: #10261a;
+  --c-green-border: #1d4433;
+  --c-green-ink: #07130c;
+  --c-amber: #ff9a62;
+  --c-amber-soft: #2a1c10;
+  --c-down: #9aa2ae;
+  --c-danger: #f0645f;
+  --c-hero: #000000;
+  --c-hero-text: #ffffff;
+  --c-hero-muted: #8a929e;
+  --c-hero-surface: #14171b;
+  --c-hero-line: #262b31;
+  --c-shadow: none;
+  --c-shadow-hero: none;
+}
+
+@theme inline {
+  --color-app: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-line: var(--c-border);
+  --color-line-btn: var(--c-border-btn);
+  --color-ink: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-dim: var(--c-dim);
+  --color-faint: var(--c-faint);
+  --color-sub: var(--c-line);
+  --color-icon: var(--c-icon);
+  --color-accent: var(--c-accent);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-line: var(--c-accent-border);
+  --color-accent-ink: var(--c-accent-text);
+  --color-ok: var(--c-green);
+  --color-ok-soft: var(--c-green-soft);
+  --color-ok-line: var(--c-green-border);
+  --color-ok-ink: var(--c-green-ink);
+  --color-warn: var(--c-amber);
+  --color-warn-soft: var(--c-amber-soft);
+  --color-down: var(--c-down);
+  --color-danger: var(--c-danger);
+  --color-hero: var(--c-hero);
+  --color-hero-ink: var(--c-hero-text);
+  --color-hero-muted: var(--c-hero-muted);
+  --color-hero-surface: var(--c-hero-surface);
+  --color-hero-line: var(--c-hero-line);
+
+  --font-sans: 'Outfit', 'Segoe UI Variable', system-ui, sans-serif;
+
+  --shadow-card: var(--c-shadow);
+  --shadow-hero: var(--c-shadow-hero);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Outfit', 'Segoe UI Variable', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
