@@ -10,7 +10,10 @@ interface StoredSettings {
   sound: boolean
   name: string
   bodyweightKg: number
+  avatar: string
+  onboarded: boolean
   updatedAt: number
+  syncedAt: number
 }
 
 const defaults: StoredSettings = {
@@ -19,7 +22,10 @@ const defaults: StoredSettings = {
   sound: true,
   name: '',
   bodyweightKg: 75,
+  avatar: '',
+  onboarded: false,
   updatedAt: 0,
+  syncedAt: 0,
 }
 
 function load(): StoredSettings {
@@ -33,6 +39,14 @@ function load(): StoredSettings {
 
 export const readBodyweightKg = () => load().bodyweightKg
 
+export const initialsOf = (name: string) =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
+
 export const useSettingsStore = defineStore('settings', () => {
   const stored = load()
 
@@ -41,7 +55,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const sound = ref(stored.sound)
   const name = ref(stored.name)
   const bodyweightKg = ref(stored.bodyweightKg)
+  const avatar = ref(stored.avatar)
+  const onboarded = ref(stored.onboarded)
   const updatedAt = ref(stored.updatedAt)
+  const syncedAt = ref(stored.syncedAt)
 
   let applyingRemote = false
 
@@ -51,7 +68,10 @@ export const useSettingsStore = defineStore('settings', () => {
     sound: sound.value,
     name: name.value,
     bodyweightKg: bodyweightKg.value,
+    avatar: avatar.value,
+    onboarded: onboarded.value,
     updatedAt: updatedAt.value,
+    syncedAt: syncedAt.value,
   })
 
   function cache() {
@@ -60,21 +80,29 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {}
   }
 
-  watch([units, defaultRestSec, sound, name, bodyweightKg], () => {
+  watch([units, defaultRestSec, sound, name, bodyweightKg, avatar, onboarded], () => {
     if (!applyingRemote) updatedAt.value = Date.now()
     cache()
   }, { deep: true, flush: 'sync' })
 
-  function adopt(row: Record<string, unknown>) {
+  function quietly(apply: () => void) {
     applyingRemote = true
-    units.value = (row.units as StoredSettings['units']) ?? units.value
-    defaultRestSec.value = (row.default_rest_sec as number) ?? defaultRestSec.value
-    sound.value = (row.sound as boolean) ?? sound.value
-    name.value = (row.name as string) ?? name.value
-    bodyweightKg.value = (row.bodyweight_kg as number) ?? bodyweightKg.value
-    updatedAt.value = Date.parse(String(row.updated_at ?? 0)) || 0
+    apply()
     applyingRemote = false
     cache()
+  }
+
+  function adopt(row: Record<string, unknown>) {
+    quietly(() => {
+      units.value = (row.units as StoredSettings['units']) ?? units.value
+      defaultRestSec.value = (row.default_rest_sec as number) ?? defaultRestSec.value
+      sound.value = (row.sound as boolean) ?? sound.value
+      name.value = (row.name as string) ?? name.value
+      bodyweightKg.value = (row.bodyweight_kg as number) ?? bodyweightKg.value
+      avatar.value = (row.avatar as string) ?? ''
+      updatedAt.value = Date.parse(String(row.updated_at ?? 0)) || 0
+      syncedAt.value = updatedAt.value
+    })
   }
 
   async function syncProfile(userId: string) {
@@ -86,6 +114,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
     if (error) throw error
 
+    if (data?.onboarded_at && !onboarded.value) quietly(() => (onboarded.value = true))
+
     const remoteAt = data ? Date.parse(String(data.updated_at ?? 0)) || 0 : 0
     if (data && remoteAt > updatedAt.value) {
       adopt(data)
@@ -93,6 +123,8 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     if (updatedAt.value === 0) return 'idle'
+
+    const pushedAt = updatedAt.value
 
     const { error: failed } = await supabase.from('profiles').upsert(
       {
@@ -102,24 +134,31 @@ export const useSettingsStore = defineStore('settings', () => {
         sound: sound.value,
         name: name.value,
         bodyweight_kg: bodyweightKg.value,
+        avatar: avatar.value || null,
+        ...(onboarded.value ? { onboarded_at: new Date(updatedAt.value).toISOString() } : {}),
         updated_at: new Date(updatedAt.value).toISOString(),
       },
       { onConflict: 'user_id' },
     )
     if (failed) throw failed
 
+    syncedAt.value = Math.max(syncedAt.value, pushedAt)
+    cache()
     return 'pushed'
   }
 
   function reset() {
-    applyingRemote = true
-    units.value = defaults.units
-    defaultRestSec.value = defaults.defaultRestSec
-    sound.value = defaults.sound
-    name.value = defaults.name
-    bodyweightKg.value = defaults.bodyweightKg
-    updatedAt.value = defaults.updatedAt
-    applyingRemote = false
+    quietly(() => {
+      units.value = defaults.units
+      defaultRestSec.value = defaults.defaultRestSec
+      sound.value = defaults.sound
+      name.value = defaults.name
+      bodyweightKg.value = defaults.bodyweightKg
+      avatar.value = defaults.avatar
+      onboarded.value = defaults.onboarded
+      updatedAt.value = defaults.updatedAt
+      syncedAt.value = defaults.syncedAt
+    })
     try {
       localStorage.removeItem(STORAGE_KEY)
     } catch {}
@@ -129,13 +168,9 @@ export const useSettingsStore = defineStore('settings', () => {
     if (!name.value.trim() && from?.trim()) name.value = from.trim()
   }
 
-  const initials = () =>
-    name.value
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join('')
+  const initials = () => initialsOf(name.value)
+
+  const hasPendingProfile = () => updatedAt.value > syncedAt.value
 
   return {
     units,
@@ -143,9 +178,12 @@ export const useSettingsStore = defineStore('settings', () => {
     sound,
     name,
     bodyweightKg,
+    avatar,
+    onboarded,
     updatedAt,
     initials,
     syncProfile,
+    hasPendingProfile,
     seedName,
     reset,
   }

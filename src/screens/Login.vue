@@ -127,7 +127,7 @@ async function useAnotherAccount() {
             placeholder="••••••••"
             @keyup.enter="enter"
           />
-          <button class="flex h-11 w-11 items-center justify-center rounded-xl text-dim" type="button" @click="reveal = !reveal">
+          <button class="flex h-11 w-11 items-center justify-center rounded-xl text-dim" type="button" :aria-label="reveal ? 'Ocultar contraseña' : 'Mostrar contraseña'" @click="reveal = !reveal">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" /><circle cx="12" cy="12" r="3" />
             </svg>

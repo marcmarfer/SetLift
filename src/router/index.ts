@@ -32,6 +32,7 @@ export const router = createRouter({
     { path: '/account', name: 'account', component: () => import('../screens/Account.vue') },
     { path: '/account/edit', name: 'edit-profile', component: () => import('../screens/EditProfile.vue') },
     { path: '/account/two-factor', name: 'two-factor', component: () => import('../screens/TwoFactor.vue') },
+    { path: '/welcome', name: 'welcome', component: () => import('../screens/Welcome.vue') },
     { path: '/login', name: 'login', component: () => import('../screens/Login.vue'), meta: { access: 'guest' } },
     { path: '/signup', name: 'signup', component: () => import('../screens/SignUp.vue'), meta: { access: 'guest' } },
     {

@@ -12,6 +12,7 @@ const settings = useSettingsStore()
 const name = ref('')
 const email = ref('')
 const password = ref('')
+const reveal = ref(false)
 
 async function create() {
   if (!(await auth.signUp(name.value, email.value, password.value))) return
@@ -57,12 +58,24 @@ async function create() {
 
       <label class="flex flex-col gap-1.5">
         <span class="text-[11.5px] font-medium tracking-[0.04em] text-faint">Contraseña</span>
-        <input
-          v-model="password"
-          class="num h-14 rounded-2xl border border-line-btn bg-app px-4 text-[15px] tracking-[0.16em] outline-none focus:border-accent"
-          type="password"
-          placeholder="••••••••"
-        />
+        <div class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-app pl-4 pr-2 focus-within:border-accent">
+          <input
+            v-model="password"
+            class="num h-full flex-grow bg-transparent text-[15px] tracking-[0.16em] outline-none"
+            :type="reveal ? 'text' : 'password'"
+            placeholder="••••••••"
+          />
+          <button
+            class="flex h-11 w-11 items-center justify-center rounded-xl text-dim"
+            type="button"
+            :aria-label="reveal ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+            @click="reveal = !reveal"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" /><circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        </div>
         <span class="text-[11.5px] text-faint">Mínimo 8 caracteres</span>
       </label>
 

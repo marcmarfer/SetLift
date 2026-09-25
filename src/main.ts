@@ -27,7 +27,15 @@ expireWeeklyLaterSessions()
       const id = ready()
       if (!id) return
       sync(id).catch((error) => console.error('[sync]', error))
-      settings.syncProfile(id).catch((error) => console.error('[profile]', error))
+      settings
+        .syncProfile(id)
+        .then(() => {
+          settings.seedName(auth.displayName)
+          if (!settings.onboarded && router.currentRoute.value.name !== 'welcome') {
+            router.replace({ name: 'welcome' })
+          }
+        })
+        .catch((error) => console.error('[profile]', error))
     }
 
     let pending: ReturnType<typeof setTimeout> | null = null
@@ -40,9 +48,9 @@ expireWeeklyLaterSessions()
       }, 4000)
     }
 
-    auth.restore().then(() => {
-      settings.seedName(auth.displayName)
-      catchUp()
+    auth.restore().then(catchUp)
+    watch(ready, (id) => {
+      if (id) catchUp()
     })
 
     onLocalChange(soon)

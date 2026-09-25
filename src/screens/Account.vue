@@ -8,6 +8,7 @@ import { deleteAllTraining } from '../lib/localData'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import Avatar from '../components/Avatar.vue'
 import type { Session } from '../types'
 
 const router = useRouter()
@@ -107,9 +108,7 @@ async function importBackup(event: Event) {
     <div class="flex flex-grow flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
       <section class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pt-3.5 shadow-card">
         <div class="flex items-center gap-3.5 pb-3.5">
-          <span class="num flex h-14 w-14 items-center justify-center rounded-full border border-accent-line bg-accent-soft text-[19px] font-bold text-accent">
-            {{ settings.initials() }}
-          </span>
+          <Avatar :src="settings.avatar" :initials="settings.initials()" class="h-14 w-14 text-[19px]" />
           <div class="flex flex-grow flex-col gap-1">
             <span class="text-[17px] font-bold tracking-[-0.01em]">{{ settings.name || auth.email }}</span>
             <span v-if="settings.name" class="text-[13px] text-muted">{{ auth.email }}</span>

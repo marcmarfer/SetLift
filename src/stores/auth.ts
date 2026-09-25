@@ -130,6 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
   const userId = ref<string | null>(rememberedUserId())
   const email = ref<string | null>(null)
   const displayName = ref<string | null>(null)
+  const photoUrl = ref<string | null>(null)
   const phase = ref<AuthPhase>('anonymous')
   const working = ref(false)
   const error = ref<string | null>(null)
@@ -154,6 +155,10 @@ export const useAuthStore = defineStore('auth', () => {
     userId.value = user.id
     email.value = user.email ?? null
     displayName.value = (user.user_metadata?.name as string | undefined) ?? displayName.value
+    photoUrl.value =
+      (user.user_metadata?.avatar_url as string | undefined) ??
+      (user.user_metadata?.picture as string | undefined) ??
+      photoUrl.value
     needsReauth.value = false
     pendingFactorId.value = null
     forgetRecovery()
@@ -534,17 +539,24 @@ export const useAuthStore = defineStore('auth', () => {
     const leaving = userId.value
     error.value = null
 
-    if (leaving && !discardPending && (await hasPendingChanges(leaving))) {
+    const settings = useSettingsStore()
+    const pending = leaving && (settings.hasPendingProfile() || (await hasPendingChanges(leaving)))
+
+    if (leaving && pending && !discardPending) {
       try {
         await sync(leaving)
-      } catch {
-        error.value = 'Tienes cambios sin subir. Conéctate antes de cerrar sesión para no perderlos.'
+        await settings.syncProfile(leaving)
+      } catch (problem) {
+        const code = codeOf(problem)
+        error.value = navigator.onLine
+          ? `No se han podido subir tus cambios${code ? ` (${code})` : ''}. Si sales ahora, se perderán.`
+          : 'Tienes cambios sin subir. Conéctate antes de cerrar sesión para no perderlos.'
         return false
       }
     }
 
     await clearDevice()
-    useSettingsStore().reset()
+    settings.reset()
     forget()
     forgetRecovery()
     if (leaving) forgetSyncState(leaving)
@@ -608,6 +620,7 @@ export const useAuthStore = defineStore('auth', () => {
     userId,
     email,
     displayName,
+    photoUrl,
     phase,
     working,
     error,
