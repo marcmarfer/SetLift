@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import TabBar from './components/TabBar.vue'
 import UndoBar from './components/UndoBar.vue'
 import { TAB_PATHS } from './router'
 import { useAuthStore } from './stores/auth'
+import { useTabSwipe } from './composables/useTabSwipe'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 
 const showTabs = computed(() => TAB_PATHS.includes(route.path))
 const showReauth = computed(() => auth.needsReauth && auth.phase === 'ready')
+
+const area = ref<HTMLElement | null>(null)
+const pager = ref<HTMLElement | null>(null)
+useTabSwipe(area, pager, TAB_PATHS, router, () => showTabs.value)
 </script>
 
 <template>
@@ -25,8 +31,10 @@ const showReauth = computed(() => auth.needsReauth && auth.phase === 'ready')
       <span class="font-semibold text-accent-ink">Entrar</span>
     </RouterLink>
 
-    <main class="flex-grow overflow-hidden">
-      <RouterView />
+    <main ref="area" class="flex-grow overflow-hidden">
+      <div ref="pager" class="h-full">
+        <RouterView />
+      </div>
     </main>
     <UndoBar />
     <TabBar v-if="showTabs" />
