@@ -29,12 +29,7 @@ expireWeeklyLaterSessions()
       sync(id).catch((error) => console.error('[sync]', error))
       settings
         .syncProfile(id)
-        .then(() => {
-          settings.seedName(auth.displayName)
-          if (!settings.onboarded && router.currentRoute.value.name !== 'welcome') {
-            router.replace({ name: 'welcome' })
-          }
-        })
+        .then(() => settings.seedName(auth.displayName))
         .catch((error) => console.error('[profile]', error))
     }
 

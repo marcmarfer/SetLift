@@ -546,6 +546,7 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         await sync(leaving)
         await settings.syncProfile(leaving)
+        if (settings.hasPendingProfile()) await settings.syncProfile(leaving)
       } catch (problem) {
         const code = codeOf(problem)
         error.value = navigator.onLine

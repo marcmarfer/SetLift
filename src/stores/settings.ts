@@ -105,7 +105,35 @@ export const useSettingsStore = defineStore('settings', () => {
     })
   }
 
-  async function syncProfile(userId: string) {
+  let syncing: Promise<'pulled' | 'pushed' | 'idle'> | null = null
+  let loadedFor: string | null = null
+
+  function syncProfile(userId: string) {
+    if (!syncing) {
+      syncing = exchange(userId)
+        .then((result) => {
+          loadedFor = userId
+          return result
+        })
+        .finally(() => {
+          syncing = null
+        })
+    }
+    return syncing
+  }
+
+  async function ensureProfile(userId: string, timeoutMs = 6000) {
+    if (loadedFor === userId) return true
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+    try {
+      await Promise.race([syncProfile(userId), timeout])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function exchange(userId: string): Promise<'pulled' | 'pushed' | 'idle'> {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -148,6 +176,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function reset() {
+    loadedFor = null
     quietly(() => {
       units.value = defaults.units
       defaultRestSec.value = defaults.defaultRestSec
@@ -183,6 +212,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updatedAt,
     initials,
     syncProfile,
+    ensureProfile,
     hasPendingProfile,
     seedName,
     reset,

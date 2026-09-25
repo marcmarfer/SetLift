@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Today from '../screens/Today.vue'
 import { useAuthStore } from '../stores/auth'
+import { useSettingsStore } from '../stores/settings'
 
 export const TAB_PATHS = ['/', '/routines', '/history', '/progress']
 
@@ -57,7 +58,7 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to, from) => {
   const auth = useAuthStore()
 
   if (auth.phase === 'returning') {
@@ -67,7 +68,20 @@ router.beforeEach((to) => {
   if (to.meta.access === 'any') return true
   if (auth.phase === 'recovery') return { name: 'reset-password' }
   if (auth.phase === 'challenge') return to.name === 'login' ? true : { name: 'login' }
-  if (auth.phase === 'ready') return to.meta.access === 'guest' ? { name: 'today' } : true
+  if (auth.phase === 'ready') {
+    const settings = useSettingsStore()
+    if (from.name === 'welcome' && to.name !== 'welcome' && !settings.onboarded) return false
+    if (to.meta.access === 'guest') return { name: 'today' }
+
+    const pendingWelcome =
+      to.name !== 'welcome' &&
+      !settings.onboarded &&
+      auth.userId !== null &&
+      (await settings.ensureProfile(auth.userId)) &&
+      !settings.onboarded
+
+    return pendingWelcome ? { name: 'welcome' } : true
+  }
 
   return to.meta.access === 'guest' ? true : { name: 'login' }
 })

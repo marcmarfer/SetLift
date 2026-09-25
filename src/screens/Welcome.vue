@@ -23,6 +23,10 @@ function start() {
   settings.onboarded = true
   router.replace({ name: 'today' })
 }
+
+async function useAnotherAccount() {
+  if (await auth.signOut()) router.replace({ name: 'login' })
+}
 </script>
 
 <template>
@@ -59,12 +63,20 @@ function start() {
       </label>
     </div>
 
-    <div class="px-5 pb-7">
+    <div class="flex flex-col gap-1 px-5 pb-5">
+      <p v-if="auth.error" class="mb-1.5 rounded-2xl border border-warn bg-warn-soft px-3.5 py-2.5 text-[12.5px] leading-snug text-ink">
+        {{ auth.error }}
+      </p>
+
       <button
         class="flex h-14 w-full items-center justify-center rounded-2xl bg-accent text-base font-bold text-hero-ink"
         type="button"
         @click="start"
       >Empezar</button>
+
+      <button class="flex h-13 items-center justify-center text-sm text-muted" type="button" @click="useAnotherAccount">
+        Entrar con otra cuenta
+      </button>
     </div>
   </div>
 </template>

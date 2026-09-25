@@ -12,18 +12,25 @@ const password = ref('')
 const reveal = ref(false)
 
 const code = ref('')
+const landing = ref(false)
 const usingRecovery = ref(false)
+
+async function land() {
+  landing.value = true
+  await router.replace('/')
+  landing.value = false
+}
 
 async function enter() {
   if (!(await auth.signIn(email.value, password.value))) return
-  if (auth.phase === 'ready') router.replace('/')
+  if (auth.phase === 'ready') await land()
 }
 
 async function confirm() {
   const ok = usingRecovery.value
     ? await auth.verifyRecoveryCode(code.value)
     : await auth.verifyChallenge(code.value)
-  if (ok) router.replace('/')
+  if (ok) await land()
 }
 
 async function useAnotherAccount() {
@@ -69,9 +76,9 @@ async function useAnotherAccount() {
       <button
         class="flex h-14 items-center justify-center rounded-2xl bg-accent text-base font-bold text-hero-ink disabled:opacity-60"
         type="button"
-        :disabled="auth.working || !code.trim()"
+        :disabled="auth.working || landing || !code.trim()"
         @click="confirm"
-      >{{ auth.working ? 'Comprobando…' : 'Confirmar' }}</button>
+      >{{ auth.working || landing ? 'Comprobando…' : 'Confirmar' }}</button>
 
       <button
         v-if="auth.recoveryCodesAvailable"
@@ -148,9 +155,9 @@ async function useAnotherAccount() {
       <button
         class="flex h-14 items-center justify-center rounded-2xl bg-accent text-base font-bold text-hero-ink disabled:opacity-60"
         type="button"
-        :disabled="auth.working"
+        :disabled="auth.working || landing"
         @click="enter"
-      >{{ auth.working ? 'Entrando…' : 'Entrar' }}</button>
+      >{{ auth.working || landing ? 'Entrando…' : 'Entrar' }}</button>
 
       <RouterLink to="/signup" class="flex h-13 items-center justify-center gap-1.5 text-sm text-muted">
         ¿No tienes cuenta? <span class="font-semibold text-accent">Crear una</span>
