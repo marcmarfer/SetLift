@@ -271,6 +271,14 @@ export const useAuthStore = defineStore('auth', () => {
   async function signInWithGoogle() {
     working.value = true
     error.value = null
+
+    const settleOnBack = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      working.value = false
+      window.removeEventListener('pageshow', settleOnBack)
+    }
+    window.addEventListener('pageshow', settleOnBack)
+
     try {
       const { error: failed } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -279,6 +287,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (failed) throw failed
       return true
     } catch (problem) {
+      window.removeEventListener('pageshow', settleOnBack)
       error.value = translate(problem)
       working.value = false
       return false

@@ -68,7 +68,10 @@ async function pullTable(table: SyncTable, userId: string): Promise<string[]> {
   if (rows.length === 0) return []
 
   const target = db.table(table)
-  const incoming = rows.filter((row) => !row.deleted_at)
+  const deleting = new Set(
+    (await db.tombstones.where('table').equals(table).toArray()).map((stone) => stone.rowId),
+  )
+  const incoming = rows.filter((row) => !row.deleted_at && !deleting.has(String(row.id)))
   const gone = rows.filter((row) => row.deleted_at).map((row) => String(row.id))
 
   const current = await target.bulkGet(incoming.map((row) => String(row.id)))

@@ -6,7 +6,7 @@ import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
 import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
-import { bestOneRepMax, exerciseEntries, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
+import { bestOneRepMax, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import { minReps, shortLabel, targetOf } from '../lib/targets'
 import { startingWeight, weightLabel } from '../lib/bodyweight'
@@ -106,14 +106,26 @@ async function confirm() {
   })
 
   const session = data.value.session
-  if (session?.later && stamped.some((set) => set.done)) {
-    await db.sessions.update(session.id, { later: false, updatedAt: Date.now() })
+  if (session) {
+    const changes: Partial<Session> = {}
+    if (session.routineId && !session.edited) changes.edited = true
+    if (session.later && stamped.some((set) => set.done)) changes.later = false
+    if (Object.keys(changes).length) {
+      await db.sessions.update(session.id, { ...changes, updatedAt: Date.now() })
+    }
   }
 
   discard()
 }
 
-watch(sessionId, (id) => { draft.value = readDraft<SetEntry[]>(id) }, { immediate: true })
+watch(
+  sessionId,
+  (id) => {
+    draft.value = readDraft<SetEntry[]>(id)
+    followRoutine(id).catch((error) => console.error('[sheet]', error))
+  },
+  { immediate: true },
+)
 
 const swapAlternatives = computed(() => {
   const group = swapping.value
@@ -128,7 +140,10 @@ const swapAlternatives = computed(() => {
 async function addExercise(exerciseId: string) {
   adding.value = false
   const sets = draftSets()
-  const slot = sets.reduce((highest, set) => Math.max(highest, set.slot ?? 0), -1) + 1
+  const slot = Math.max(
+    sets.reduce((highest, set) => Math.max(highest, set.slot ?? 0), -1) + 1,
+    data.value.routine?.exercises.length ?? 0,
+  )
   sets.push(...(await exerciseEntries(sessionId.value, exerciseId, slot, data.value.session?.date)))
   openExerciseId.value = exerciseId
   save()
@@ -642,7 +657,7 @@ async function removeSheet() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.5l3.5 2" /></svg>
       </button>
       <button
-        v-if="!readonly"
+        v-if="!readonly && !data.session.routineId"
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
         type="button"
         aria-label="Borrar esta hoja"

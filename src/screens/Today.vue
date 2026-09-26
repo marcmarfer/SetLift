@@ -198,7 +198,29 @@ async function activatePlan(target: Plan) {
   back.value = 0
 }
 
-const confirming = ref<{ title: string; message: string; label: string; run: () => Promise<void> } | null>(null)
+const confirming = ref<{
+  title: string
+  message: string
+  label: string
+  tone?: 'danger' | 'accent'
+  run: () => Promise<void>
+} | null>(null)
+
+function warnEmpty(target: Routine) {
+  if (target.exercises.length > 0) return false
+
+  confirming.value = {
+    title: `${target.name} no tiene ejercicios`,
+    message: 'Añade al menos un ejercicio a la rutina antes de entrenarla. Lo que añadas o quites después en la hoja de un día cuenta solo para ese día.',
+    label: `Configurar ${target.name}`,
+    tone: 'accent',
+    run: async () => {
+      confirming.value = null
+      await router.push(`/routines/${target.id}`)
+    },
+  }
+  return true
+}
 
 const dueTitle = computed(() => {
   const target = routine.value
@@ -227,6 +249,7 @@ async function goFreestyle(target: Routine) {
 }
 
 async function startFreestyleWorkout(target: Routine) {
+  if (warnEmpty(target)) return
   const sheet = sheetToday(target.id)
 
   if (sheet && sheet.done > 0 && !sheet.freestyle) {
@@ -382,6 +405,10 @@ async function logPast({ date, routineId }: { date: string; routineId: string | 
   if (routineId && trainedOn(date)) return
 
   const routine = current.routines.find((item) => item.id === routineId)
+  if (routine && warnEmpty(routine)) {
+    logging.value = null
+    return
+  }
 
   const id = routine
     ? await openWorkout(routine, current.plan?.id ?? null, date)
@@ -400,6 +427,7 @@ async function fillLater() {
   const current = data.value
   const target = routine.value
   if (!target || !canMarkLater.value || trainedOn(today())) return
+  if (warnEmpty(target)) return
 
   const existing = current.sessions.find(
     (item) => item.routineId === target.id && !item.skipped && (item.date === today() || item.later),
@@ -441,6 +469,7 @@ async function clearLater(sessionId: string, name: string) {
 async function startWorkout() {
   const current = data.value
   if (!routine.value || trainedOn(today())) return
+  if (warnEmpty(routine.value)) return
   const id = await openWorkout(routine.value, current.plan?.id ?? null)
   router.push(`/workout/${id}`)
 }
@@ -568,7 +597,7 @@ function canStart(item: RoutineStatus) {
 async function startRoutine(routineId: string) {
   const current = data.value
   const target = current.routines.find((item) => item.id === routineId)
-  if (!target) return
+  if (!target || warnEmpty(target)) return
 
   const id = await openWorkout(target, current.plan?.id ?? null)
   router.push(`/workout/${id}`)
@@ -745,9 +774,21 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           <span v-else class="num text-[13px] text-hero-muted">sin registros</span>
         </div>
 
-        <p class="text-[12.5px] leading-[1.55] text-hero-muted">{{ exerciseNames }}</p>
+        <p v-if="routine.exercises.length === 0" class="text-[12.5px] leading-[1.55] text-hero-muted">
+          Esta rutina no tiene ejercicios todavía. Añade al menos uno para poder empezarla.
+        </p>
+        <p v-else class="text-[12.5px] leading-[1.55] text-hero-muted">{{ exerciseNames }}</p>
 
+        <RouterLink
+          v-if="routine.exercises.length === 0"
+          :to="`/routines/${routine.id}`"
+          class="flex h-16 items-center justify-center gap-2.5 rounded-[32px] bg-accent text-[19px] font-bold tracking-[-0.01em] text-hero-ink"
+        >
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5z" /></svg>
+          Configurar rutina
+        </RouterLink>
         <button
+          v-else
           class="flex h-16 items-center justify-center gap-2.5 rounded-[32px] bg-accent text-[19px] font-bold tracking-[-0.01em] text-hero-ink"
           type="button"
           @click="startWorkout"
@@ -757,7 +798,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         </button>
 
         <button
-          v-if="canMarkLater"
+          v-if="canMarkLater && routine.exercises.length > 0"
           class="flex h-8 items-center justify-center gap-1.5 text-[12.5px] font-medium text-hero-muted"
           type="button"
           @click="fillLater"
@@ -1042,6 +1083,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
       :title="confirming.title"
       :message="confirming.message"
       :label="confirming.label"
+      :tone="confirming.tone ?? 'danger'"
       @confirm="confirming.run()"
       @close="confirming = null"
     />

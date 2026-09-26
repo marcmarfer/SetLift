@@ -91,6 +91,7 @@ export interface Session {
   skipped?: boolean
   freestyle?: boolean
   later?: boolean
+  edited?: boolean
   name?: string
   note?: string
   updatedAt: number

@@ -9,6 +9,7 @@ import Collapse from '../components/Collapse.vue'
 import ExercisePicker from '../components/ExercisePicker.vue'
 import ExerciseSheet from '../components/ExerciseSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { shortLabel } from '../lib/targets'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
@@ -112,7 +113,24 @@ function removeExercise(index: number) {
   return save(exercises)
 }
 
+const confirmingRemoval = ref<string | null>(null)
+
+async function askRemoveRoutine() {
+  const routine = data.value.routine
+  if (!routine) return
+
+  const plans = (await db.plans.toArray()).filter((plan) => plan.routineIds.includes(routine.id))
+  const inPlans = plans.length === 0
+    ? 'No está en ningún plan.'
+    : plans.length === 1
+      ? `Sale del plan ${plans[0].name}.`
+      : `Sale de ${plans.length} planes: ${plans.map((plan) => plan.name).join(', ')}.`
+
+  confirmingRemoval.value = `Se borra ${routine.name} con sus ejercicios. ${inPlans} Los entrenos que ya hiciste siguen en Historial.`
+}
+
 async function removeRoutine() {
+  confirmingRemoval.value = null
   const routine = data.value.routine
   if (!routine) return
 
@@ -542,7 +560,7 @@ function restLabel(item: RoutineExercise) {
       <button
         class="mt-2 flex h-13 items-center gap-2.5 rounded-2xl border border-line bg-surface px-3.5 text-danger shadow-card"
         type="button"
-        @click="removeRoutine"
+        @click="askRemoveRoutine"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" /></svg>
         <span class="flex-grow text-left text-[14.5px] font-semibold">Eliminar rutina</span>
@@ -578,5 +596,13 @@ function restLabel(item: RoutineExercise) {
       @close="creating = null"
     />
 
+    <ConfirmDialog
+      v-if="confirmingRemoval"
+      title="Eliminar rutina"
+      :message="confirmingRemoval"
+      label="Eliminar rutina"
+      @confirm="removeRoutine"
+      @close="confirmingRemoval = null"
+    />
   </div>
 </template>

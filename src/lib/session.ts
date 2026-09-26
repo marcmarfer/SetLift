@@ -1,7 +1,7 @@
 import { db, newId } from '../db'
 import { addDays, sameWeek, today, weekStart } from './dates'
 import { estimateOneRepMax } from './progress'
-import { forgetDraft } from './draft'
+import { forgetDraft, readDraft } from './draft'
 import { entryTarget } from './targets'
 import { startingWeight } from './bodyweight'
 import { readBodyweightKg } from '../stores/settings'
@@ -100,12 +100,17 @@ export async function openWorkout(routine: Routine, planId: string | null, date 
   const match = existing.find((session) => session.routineId === routine.id && !session.skipped)
 
   if (match) {
+    if (!match.freestyle) {
+      await followRoutine(match.id)
+      return match.id
+    }
+
     const written = await db.sets.where('sessionId').equals(match.id).count()
     if (written > 0) return match.id
 
     const entries = await templateEntries(routine, match.id, date)
     await db.transaction('rw', db.sessions, db.sets, async () => {
-      await db.sessions.update(match.id, { freestyle: false, updatedAt: now() })
+      await db.sessions.update(match.id, { freestyle: false, edited: false, updatedAt: now() })
       await db.sets.bulkPut(entries)
     })
 
@@ -122,6 +127,55 @@ export async function openWorkout(routine: Routine, planId: string | null, date 
   })
 
   return sessionId
+}
+
+function shapeOf(
+  sets: Array<Pick<SetEntry, 'slot' | 'exerciseId' | 'index' | 'type' | 'targetReps' | 'targetRepsMin' | 'targetRepsMax' | 'targetRirMin' | 'targetRirMax'>>,
+) {
+  return sets
+    .map((set) =>
+      JSON.stringify([
+        set.slot ?? null,
+        set.exerciseId,
+        set.index,
+        set.type,
+        set.targetReps ?? null,
+        set.targetRepsMin ?? null,
+        set.targetRepsMax ?? null,
+        set.targetRirMin ?? null,
+        set.targetRirMax ?? null,
+      ]),
+    )
+    .sort()
+    .join('|')
+}
+
+export async function followRoutine(sessionId: string) {
+  const session = await db.sessions.get(sessionId)
+  if (!session?.routineId || session.skipped || session.freestyle || session.edited) return
+  if (readDraft(sessionId)) return
+
+  const routine = await db.routines.get(session.routineId)
+  if (!routine) return
+
+  const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+  if (sets.some((set) => set.done)) return
+
+  const planned = routine.exercises.flatMap((exercise, slot) =>
+    exercise.sets.map((template, position) => ({
+      slot,
+      exerciseId: exercise.exerciseId,
+      index: position + 1,
+      ...entryTarget(template),
+    })),
+  )
+  if (shapeOf(planned) === shapeOf(sets)) return
+
+  const entries = await templateEntries(routine, sessionId, session.date)
+  await db.transaction('rw', db.sets, async () => {
+    await db.sets.where('sessionId').equals(sessionId).delete()
+    await db.sets.bulkPut(entries)
+  })
 }
 
 export async function openFreeWorkout(date = today()) {

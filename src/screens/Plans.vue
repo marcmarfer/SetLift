@@ -9,6 +9,7 @@ import { dueRoutine } from '../lib/plan'
 import { pruneRoutines, restoreRoutines } from '../lib/routines'
 import { useUndoStore } from '../stores/undo'
 import SwitchPlanSheet from '../components/SwitchPlanSheet.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import type { Plan, Routine, Session } from '../types'
 
 const router = useRouter()
@@ -103,6 +104,39 @@ async function rename(planId: string, value: string) {
   await db.plans.update(planId, { name, updatedAt: Date.now() })
 }
 
+const removing = ref<Plan | null>(null)
+
+const removalMessage = computed(() => {
+  const plan = removing.value
+  if (!plan) return ''
+
+  const elsewhere = new Set(
+    data.value.plans.filter((other) => other.id !== plan.id).flatMap((other) => other.routineIds),
+  )
+  const trained = new Set(data.value.sessions.map((session) => session.routineId))
+  const only = plan.routineIds.filter((id) => !elsewhere.has(id))
+  const gone = only.filter((id) => !trained.has(id)).map(nameOf)
+  const kept = only.filter((id) => trained.has(id)).map(nameOf)
+
+  const replacement = plan.active
+    ? data.value.plans.find((candidate) => candidate.id !== plan.id) ?? null
+    : null
+
+  return [
+    `Se borra ${plan.name}.`,
+    gone.length ? `También se borran las rutinas que solo estaban en este plan: ${gone.join(', ')}.` : '',
+    kept.length ? `${kept.join(', ')} se archiva${kept.length > 1 ? 'n' : ''} porque ya tiene${kept.length > 1 ? 'n' : ''} entrenos.` : '',
+    replacement ? `${replacement.name} pasa a ser el plan activo.` : '',
+    'Tu historial no se toca.',
+  ].filter(Boolean).join(' ')
+})
+
+async function confirmRemovePlan() {
+  const plan = removing.value
+  removing.value = null
+  if (plan) await removePlan(plan)
+}
+
 async function removePlan(plan: Plan) {
   const wasActive = plan.active
   const replacement = data.value.plans.find((candidate) => candidate.id !== plan.id) ?? null
@@ -155,7 +189,7 @@ async function removePlan(plan: Plan) {
           <button
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hero-line bg-hero-surface text-hero-ink"
             type="button"
-            @click="removePlan(activePlan)"
+            @click="removing = activePlan"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" />
@@ -213,7 +247,7 @@ async function removePlan(plan: Plan) {
               <button
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line-btn text-danger"
                 type="button"
-                @click="removePlan(plan)"
+                @click="removing = plan"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" />
@@ -267,5 +301,13 @@ async function removePlan(plan: Plan) {
       @close="switching = null"
     />
 
+    <ConfirmDialog
+      v-if="removing"
+      title="Eliminar plan"
+      :message="removalMessage"
+      label="Eliminar plan"
+      @confirm="confirmRemovePlan"
+      @close="removing = null"
+    />
   </div>
 </template>
