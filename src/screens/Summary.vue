@@ -5,7 +5,8 @@ import { db } from '../db'
 import { useLive } from '../composables/useLive'
 import { sheetName } from '../lib/session'
 import { longDay } from '../lib/dates'
-import { estimateOneRepMax } from '../lib/progress'
+import { estimateOneRepMax, progression } from '../lib/progress'
+import { bySession } from '../lib/upcoming'
 import { bestOneRepMax, previousSession } from '../lib/session'
 import { sessionVolume } from '../lib/plan'
 import { extraLoad } from '../lib/bodyweight'
@@ -23,6 +24,7 @@ interface SummaryData {
   routine: Routine | null
   exercises: Exercise[]
   sets: SetEntry[]
+  sheet: SetEntry[]
   previous: Record<string, SetEntry[]>
   records: Record<string, number>
 }
@@ -30,11 +32,12 @@ interface SummaryData {
 const data = useLive<SummaryData>(
   async () => {
     const session = (await db.sessions.get(sessionId.value)) ?? null
-    if (!session) return { session: null, routine: null, exercises: [], sets: [], previous: {}, records: {} }
+    if (!session) return { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {} }
 
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
     const exercises = await db.exercises.toArray()
-    const sets = (await db.sets.where('sessionId').equals(session.id).toArray()).filter((set) => set.done)
+    const sheet = await db.sets.where('sessionId').equals(session.id).toArray()
+    const sets = sheet.filter((set) => set.done)
 
     const ids = [...new Set(sets.map((set) => set.exerciseId))]
     const previous: Record<string, SetEntry[]> = {}
@@ -44,9 +47,9 @@ const data = useLive<SummaryData>(
       records[id] = await bestOneRepMax(id, session.id, session.date)
     }
 
-    return { session, routine, exercises, sets, previous, records }
+    return { session, routine, exercises, sets, sheet, previous, records }
   },
-  { session: null, routine: null, exercises: [], sets: [], previous: {}, records: {} },
+  { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {} },
   sessionId,
 )
 
@@ -108,11 +111,55 @@ function templateWeight(set: SetEntry | undefined) {
   return extraLoad(set) ?? set.weight
 }
 
+function loadLabel(set: SetEntry, weight: number) {
+  if (set.bodyweightKg == null) return `${format(weight)} kg`
+  const load = Math.round((weight - set.bodyweightKg) * 100) / 100
+  return `lastre ${load >= 0 ? '+' : '-'}${format(Math.abs(load))} kg`
+}
+
+const nextTime = computed(() => {
+  const routine = data.value.routine
+  if (!routine) return []
+
+  return routine.exercises.flatMap((item) => {
+    const mine = data.value.sheet.filter((set) => set.exerciseId === item.exerciseId)
+    const plan = progression(mine, item.incrementKg)
+    const done = plan.carried
+    const reps = mine.filter((set) => set.done).sort((a, b) => a.index - b.index).map((set) => set.reps).join(' · ')
+
+    if (plan.uniform && plan.next != null && plan.missing != null) {
+      const target = loadLabel(done[0], plan.next)
+      return [{
+        name: nameOf(item.exerciseId),
+        reps,
+        raised: plan.raised,
+        text: plan.raised
+          ? `la próxima vez, ${target}`
+          : `te ${plan.missing === 1 ? 'falta 1 rep' : `faltan ${plan.missing} reps`} para subir a ${target}`,
+      }]
+    }
+
+    if (!plan.uniform && plan.raised) {
+      const before = mine.filter((set) => set.done).sort((a, b) => a.index - b.index)
+      const moved = done.filter((set, spot) => set.weight !== before[spot]?.weight)
+      return [{
+        name: nameOf(item.exerciseId),
+        reps,
+        raised: true,
+        text: moved.map((set) => `serie ${set.index} a ${loadLabel(set, set.weight ?? 0)}`).join(', '),
+      }]
+    }
+
+    return []
+  })
+})
+
 const weightChanges = computed(() => {
   const routine = data.value.routine
   if (!routine) return []
 
   return routine.exercises.flatMap((item) => {
+    if (bySession(item)) return []
     const mine = data.value.sets.filter((set) => set.exerciseId === item.exerciseId)
     const used = templateWeight(mine[mine.length - 1])
     const planned = item.sets[item.sets.length - 1]?.weight
@@ -126,6 +173,7 @@ async function applyToRoutine() {
   if (!routine) return
 
   const exercises = routine.exercises.map((item) => {
+    if (bySession(item)) return item
     const mine = data.value.sets.filter((set) => set.exerciseId === item.exerciseId)
     const used = templateWeight(mine[mine.length - 1])
     if (used == null) return item
@@ -201,6 +249,24 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
             class="num w-[62px] text-right text-[13px] font-semibold"
             :class="line.delta.startsWith('↑') ? 'text-accent' : line.delta === '=' ? 'text-dim' : 'text-down'"
           >{{ line.delta }}</span>
+        </div>
+      </section>
+
+      <section v-if="nextTime.length" class="flex flex-col rounded-[18px] border border-line bg-surface px-3.5 py-3 shadow-card">
+        <span class="pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint">La próxima vez</span>
+        <div
+          v-for="(line, index) in nextTime"
+          :key="line.name"
+          class="flex flex-col gap-0.5 py-2"
+          :class="index > 0 ? 'border-t border-line' : ''"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="flex-grow truncate text-sm">{{ line.name }}</span>
+            <span class="num text-[13px] text-muted">{{ line.reps }}</span>
+          </div>
+          <span class="num text-[12.5px]" :class="line.raised ? 'font-semibold text-accent-ink' : 'text-dim'">
+            {{ line.raised ? '↑ ' : '' }}{{ line.text }}
+          </span>
         </div>
       </section>
 

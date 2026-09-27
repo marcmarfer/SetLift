@@ -1,4 +1,4 @@
-import type { SetEntry, SetTemplate, SetType } from '../types'
+import type { EffortTarget, RepsTarget, SetEntry, SetTemplate, SetType } from '../types'
 
 export interface Target {
   type: SetType
@@ -7,12 +7,20 @@ export interface Target {
   repsMax?: number
   rirMin?: number
   rirMax?: number
+  rpe?: number
+  effort?: EffortTarget
 }
 
-export const MODES: Array<{ value: SetType; label: string }> = [
+export const REPS_MODES: Array<{ value: RepsTarget; label: string }> = [
   { value: 'range', label: 'Rango' },
-  { value: 'fixed', label: 'Fija' },
+  { value: 'fixed', label: 'Fijas' },
   { value: 'single', label: 'Single' },
+  { value: 'amrap', label: 'AMRAP' },
+]
+
+export const EFFORT_MODES: Array<{ value: EffortTarget | null; label: string }> = [
+  { value: null, label: 'Sin objetivo' },
+  { value: 'rpe', label: '@' },
   { value: 'rir', label: 'RIR' },
   { value: 'failure', label: 'Al fallo' },
 ]
@@ -31,6 +39,29 @@ export const RIR_PRESETS: Array<[number, number]> = [
   [2, 3],
 ]
 
+export const RPE_STEPS = [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10]
+
+export function repsOf(target: Pick<Target, 'type'>): RepsTarget {
+  return target.type === 'rir' || target.type === 'failure' ? 'amrap' : target.type
+}
+
+export function effortOf(target: Pick<Target, 'type' | 'effort' | 'rpe'>): EffortTarget | null {
+  if (target.type === 'rir') return 'rir'
+  if (target.type === 'failure') return null
+  if (target.effort) return target.effort
+  return target.rpe != null ? 'rpe' : null
+}
+
+const EFFORTS_BY_REPS: Record<RepsTarget, Array<EffortTarget | null>> = {
+  range: [null, 'rpe', 'rir', 'failure'],
+  fixed: [null, 'rpe', 'rir', 'failure'],
+  single: [null, 'rpe'],
+  amrap: [null, 'rpe', 'rir'],
+}
+
+export const allowsEffort = (reps: RepsTarget, effort: EffortTarget | null) =>
+  EFFORTS_BY_REPS[reps].includes(effort)
+
 export function targetOf(set: SetEntry): Target {
   return {
     type: set.type,
@@ -39,6 +70,8 @@ export function targetOf(set: SetEntry): Target {
     repsMax: set.targetRepsMax,
     rirMin: set.targetRirMin,
     rirMax: set.targetRirMax,
+    rpe: set.targetRpe,
+    effort: set.targetEffort,
   }
 }
 
@@ -50,34 +83,45 @@ export function entryTarget(template: SetTemplate) {
     targetRepsMax: template.repsMax,
     targetRirMin: template.rirMin,
     targetRirMax: template.rirMax,
+    targetRpe: template.rpe,
+    targetEffort: effortOf(template) ?? undefined,
   }
 }
 
-export function rirLabel(target: Target) {
+export const rpeLabel = (rpe: number) => `@${String(rpe).replace('.', ',')}`
+
+export function rirLabel(target: Pick<Target, 'rirMin' | 'rirMax'>) {
   const min = target.rirMin ?? 0
   const max = target.rirMax ?? min
   return min === max ? `RIR ${min}` : `RIR ${min}–${max}`
 }
 
-export function targetLabel(target: Target) {
-  if (target.type === 'failure') return 'Al fallo'
-  if (target.type === 'single') return 'Single'
-  if (target.type === 'rir') return rirLabel(target)
-  if (target.type === 'fixed') return `${target.reps ?? 0} reps`
+export function repsLabel(target: Target) {
+  const reps = repsOf(target)
+  if (reps === 'amrap') return 'AMRAP'
+  if (reps === 'single') return 'Single'
+  if (reps === 'fixed') return String(target.reps ?? '')
   return `${target.repsMin ?? 0}–${target.repsMax ?? 0}`
+}
+
+export function effortLabel(target: Target) {
+  const effort = effortOf(target)
+  if (effort === 'rpe' && target.rpe != null) return rpeLabel(target.rpe)
+  if (effort === 'rir') return rirLabel(target)
+  if (effort === 'failure') return 'fallo'
+  return ''
 }
 
 export function shortLabel(target: Target) {
-  if (target.type === 'failure') return 'Fallo'
-  if (target.type === 'single') return 'Single'
-  if (target.type === 'rir') return rirLabel(target)
-  if (target.type === 'fixed') return String(target.reps ?? '')
-  return `${target.repsMin ?? 0}–${target.repsMax ?? 0}`
+  const effort = effortLabel(target)
+  if (!effort) return repsLabel(target)
+  return effortOf(target) === 'rpe' ? `${repsLabel(target)} ${effort}` : `${repsLabel(target)} · ${effort}`
 }
 
 export function minReps(target: Target) {
-  if (target.type === 'single') return 1
-  if (target.type === 'fixed') return target.reps ?? null
-  if (target.type === 'range') return target.repsMin ?? null
+  const reps = repsOf(target)
+  if (reps === 'single') return 1
+  if (reps === 'fixed') return target.reps ?? null
+  if (reps === 'range') return target.repsMin ?? null
   return null
 }

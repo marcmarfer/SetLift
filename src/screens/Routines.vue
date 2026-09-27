@@ -7,6 +7,7 @@ import { useLive } from '../composables/useLive'
 import { addDays, timeAgo, today } from '../lib/dates'
 import { dueRoutine, type SheetProgress } from '../lib/plan'
 import AccountButton from '../components/AccountButton.vue'
+import { preparedCount } from '../lib/upcoming'
 import type { Plan, PlanMode, Routine, Session } from '../types'
 
 interface RoutinesData {
@@ -57,13 +58,21 @@ const planRoutines = computed(() => {
       id,
       name: routine.name,
       exercises: routine.exercises.length,
+      prepared: preparedCount(routine, data.value.sessions),
       lastDate: previous[0]?.date ?? null,
       due: id === due,
     }]
   })
 })
 
-const rows = ref<Array<{ id: string; name: string; exercises: number; lastDate: string | null; due: boolean }>>([])
+const rows = ref<Array<{
+  id: string
+  name: string
+  exercises: number
+  prepared: number
+  lastDate: string | null
+  due: boolean
+}>>([])
 
 watch(planRoutines, (list) => { rows.value = [...list] }, { immediate: true })
 
@@ -183,7 +192,8 @@ async function setMode(mode: PlanMode) {
             <div class="flex flex-grow flex-col gap-1">
               <span class="text-base" :class="item.due ? 'font-bold' : 'font-semibold'">{{ item.name }}</span>
               <span class="num text-xs" :class="item.due ? 'text-accent-ink' : 'text-sub'">
-                {{ item.exercises }} ejercicios · {{ item.due ? 'toca ahora' : item.lastDate ? timeAgo(item.lastDate) : 'sin registros' }}
+                {{ item.exercises }} ejercicios<template v-if="item.prepared"> · {{ item.prepared }} {{ item.prepared === 1 ? 'preparada' : 'preparadas' }}</template>
+                · {{ item.due ? 'toca ahora' : item.lastDate ? timeAgo(item.lastDate) : 'sin registros' }}
               </span>
             </div>
             <span class="text-icon">

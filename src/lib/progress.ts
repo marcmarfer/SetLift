@@ -1,5 +1,44 @@
 import type { Exercise, Session, SetEntry } from '../types'
 import { weekStart } from './dates'
+import { repsOf } from './targets'
+
+export interface Progression {
+  carried: SetEntry[]
+  raised: boolean
+  uniform: boolean
+  missing: number | null
+  next: number | null
+}
+
+const addLoad = (weight: number | null, increment: number) => Math.round(((weight ?? 0) + increment) * 100) / 100
+
+export function progression(sets: SetEntry[], increment: number): Progression {
+  const done = sets.filter((set) => set.done).sort((a, b) => a.index - b.index)
+  const ranged = done.filter(
+    (set) => repsOf(set) === 'range' && set.targetRepsMax != null && set.reps != null,
+  )
+  const idle: Progression = { carried: done, raised: false, uniform: false, missing: null, next: null }
+  if (ranged.length === 0) return idle
+
+  const topped = (set: SetEntry) => (set.reps ?? 0) >= (set.targetRepsMax ?? 0)
+  const uniform = new Set(ranged.map((set) => set.weight)).size === 1
+
+  if (uniform) {
+    if (done.length < sets.length) return { ...idle, uniform }
+    const missing = ranged.reduce((total, set) => total + Math.max(0, (set.targetRepsMax ?? 0) - (set.reps ?? 0)), 0)
+    const next = addLoad(ranged[0].weight, increment)
+    const raised = missing === 0
+    const carried = raised
+      ? done.map((set) => (ranged.includes(set) ? { ...set, weight: next } : set))
+      : done
+    return { carried, raised, uniform, missing, next }
+  }
+
+  const carried = done.map((set) =>
+    ranged.includes(set) && topped(set) ? { ...set, weight: addLoad(set.weight, increment) } : set,
+  )
+  return { carried, raised: carried.some((set, spot) => set !== done[spot]), uniform, missing: null, next: null }
+}
 
 export interface BestSet {
   weight: number

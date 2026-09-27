@@ -8,8 +8,11 @@ import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
-import { minReps, shortLabel, targetOf } from '../lib/targets'
+import { effortLabel, effortOf, minReps, repsLabel, repsOf, targetOf } from '../lib/targets'
 import { startingWeight, weightLabel } from '../lib/bodyweight'
+import { sameTechnique } from '../lib/technique'
+import { blueprintOf, spendUpcoming } from '../lib/upcoming'
+import TechniqueTag from '../components/TechniqueTag.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -22,7 +25,7 @@ import Collapse from '../components/Collapse.vue'
 import RestBar from '../components/RestBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Calendar from '../components/Calendar.vue'
-import type { Exercise, Routine, Session, SetEntry } from '../types'
+import type { Exercise, Routine, RoutineExercise, Session, SetEntry } from '../types'
 
 interface WorkoutGroup {
   slot: number
@@ -31,7 +34,7 @@ interface WorkoutGroup {
   name: string
   restSec: number | null
   increment: number
-  alternativeIds: string[]
+  technique: string | null
   sets: SetEntry[]
   done: number
   total: number
@@ -113,6 +116,7 @@ async function confirm() {
     if (Object.keys(changes).length) {
       await db.sessions.update(session.id, { ...changes, updatedAt: Date.now() })
     }
+    if (stamped.some((set) => set.done)) await spendUpcoming(session, stamped)
   }
 
   discard()
@@ -131,10 +135,9 @@ const swapAlternatives = computed(() => {
   const group = swapping.value
   if (!group) return []
   const current = data.value.exercises.find((exercise) => exercise.id === group.exerciseId)
-  const sameGroup = data.value.exercises
+  return data.value.exercises
     .filter((exercise) => exercise.group === current?.group && exercise.id !== group.exerciseId)
     .map((exercise) => exercise.id)
-  return [...new Set([...group.alternativeIds, ...sameGroup])]
 })
 
 async function addExercise(exerciseId: string) {
@@ -142,7 +145,7 @@ async function addExercise(exerciseId: string) {
   const sets = draftSets()
   const slot = Math.max(
     sets.reduce((highest, set) => Math.max(highest, set.slot ?? 0), -1) + 1,
-    data.value.routine?.exercises.length ?? 0,
+    data.value.blueprint.length,
   )
   sets.push(...(await exerciseEntries(sessionId.value, exerciseId, slot, data.value.session?.date)))
   openExerciseId.value = exerciseId
@@ -189,6 +192,7 @@ function swapExercise(exerciseId: string) {
 interface WorkoutData {
   session: Session | null
   routine: Routine | null
+  blueprint: RoutineExercise[]
   exercises: Exercise[]
   sets: SetEntry[]
   previous: Record<string, SetEntry[]>
@@ -201,7 +205,7 @@ const data = useLive<WorkoutData>(
   async () => {
     const session = (await db.sessions.get(sessionId.value)) ?? null
     if (!session) {
-      return { session: null, routine: null, exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} }
+      return { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} }
     }
 
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
@@ -245,13 +249,46 @@ const data = useLive<WorkoutData>(
     const dueName = everyRoutine.find((item) => item.id === due)?.name
     const pending = dueName ? { [today()]: [dueName] } : {}
 
-    return { session, routine, exercises, sets, previous, records, marks, pending }
+    const blueprint = routine ? blueprintOf(routine, everySession, session.id) : []
+
+    return { session, routine, blueprint, exercises, sets, previous, records, marks, pending }
   },
-  { session: null, routine: null, exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} },
+  { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} },
   sessionId,
 )
 
 const nameOf = (id: string) => data.value.exercises.find((item) => item.id === id)?.name ?? '—'
+
+const unsaved = ref<{ previous: Record<string, SetEntry[]>; records: Record<string, number> }>({
+  previous: {},
+  records: {},
+})
+
+watch(
+  () => {
+    const known = data.value.previous
+    return [...new Set(sheetSets.value.map((set) => set.exerciseId))].filter((id) => !(id in known)).join(',')
+  },
+  async (missing) => {
+    const session = data.value.session
+    if (!missing || !session) return
+    for (const id of missing.split(',')) {
+      if (id in unsaved.value.previous) continue
+      const previous = await previousSession(id, session.id, session.date)
+      const record = await bestOneRepMax(id, session.id, session.date)
+      unsaved.value = {
+        previous: { ...unsaved.value.previous, [id]: previous },
+        records: { ...unsaved.value.records, [id]: record },
+      }
+    }
+  },
+  { immediate: true },
+)
+
+watch(sessionId, () => { unsaved.value = { previous: {}, records: {} } })
+
+const previousOf = (id: string) => data.value.previous[id] ?? unsaved.value.previous[id] ?? []
+const recordOf = (id: string) => data.value.records[id] ?? unsaved.value.records[id] ?? 0
 
 async function renameSheet(value: string) {
   const session = data.value.session
@@ -265,7 +302,7 @@ const groups = computed(() => {
 
   const slots = new Map<number, SetEntry[]>()
   for (const set of sheetSets.value) {
-    const slot = set.slot ?? current.routine?.exercises.findIndex((item) => item.exerciseId === set.exerciseId) ?? 0
+    const slot = set.slot ?? current.blueprint.findIndex((item) => item.exerciseId === set.exerciseId)
     const list = slots.get(slot) ?? []
     list.push(set)
     slots.set(slot, list)
@@ -276,8 +313,8 @@ const groups = computed(() => {
     .map(([slot, list]) => {
       const sets = [...list].sort((a, b) => a.index - b.index)
       const exerciseId = sets[0].exerciseId
-      const template = current.routine?.exercises[slot]
-      const best = current.records[exerciseId] ?? 0
+      const template = current.blueprint[slot]
+      const best = recordOf(exerciseId)
       const recordIds = new Set(
         sets
           .filter((set) => set.done && set.reps != null && best > 0 && estimateOneRepMax(set.weight ?? 0, set.reps) > best)
@@ -291,12 +328,12 @@ const groups = computed(() => {
         name: nameOf(exerciseId),
         restSec: template?.restSec ?? null,
         increment: template?.incrementKg ?? 2.5,
-        alternativeIds: template?.alternativeIds ?? [],
+        technique: sets[0].technique?.trim() || null,
         sets,
         done: sets.filter((set) => set.done).length,
         total: sets.length,
-        previous: current.previous[exerciseId] ?? [],
-        record: current.records[exerciseId] ?? 0,
+        previous: previousOf(exerciseId),
+        record: recordOf(exerciseId),
       }
     })
 })
@@ -337,13 +374,9 @@ function previousLabel(group: { previous: SetEntry[] }, index: number) {
 }
 
 function targetLabel(set: SetEntry) {
-  if (set.type === 'rir') return '—'
-  return shortLabel(targetOf(set))
+  return repsLabel(targetOf(set))
 }
 
-function typeLabel(set: SetEntry) {
-  return shortLabel(targetOf(set))
-}
 
 function format(value: number) {
   return String(value).replace('.', ',')
@@ -365,7 +398,7 @@ function gainLabel(set: SetEntry) {
 function suggestion(set: SetEntry, group: { increment: number }) {
   if (isPast.value) return null
   if (set.type !== 'range' || set.reps == null || set.targetRepsMax == null) return null
-  if (set.reps <= set.targetRepsMax) return null
+  if (effortOf(targetOf(set)) !== 'failure' || set.reps <= set.targetRepsMax) return null
 
   return { reps: set.reps, weight: (set.weight ?? 0) + group.increment }
 }
@@ -388,6 +421,12 @@ function defaultReps(set: SetEntry, group: { previous: SetEntry[] }) {
 }
 
 function toggle(set: SetEntry, group: { restSec: number | null; previous: SetEntry[]; sets: SetEntry[]; name: string }) {
+  const reps = set.done ? null : defaultReps(set, group)
+  if (!set.done && reps == null) {
+    edit(set, 'reps')
+    return
+  }
+
   const target = change(set.id)
   if (!target) return
 
@@ -398,7 +437,7 @@ function toggle(set: SetEntry, group: { restSec: number | null; previous: SetEnt
     return
   }
 
-  target.reps = defaultReps(target, group)
+  target.reps = reps
   target.done = true
   target.doneAt = Date.now()
   save()
@@ -413,6 +452,12 @@ function toggle(set: SetEntry, group: { restSec: number | null; previous: SetEnt
     : `${group.name} completado`
 
   rest.start(group.restSec, label)
+}
+
+function lastTechnique(group: WorkoutGroup) {
+  if (group.previous.length === 0) return undefined
+  const before = group.previous[0].technique?.trim() || null
+  return sameTechnique(before, group.technique) ? undefined : before
 }
 
 function applySuggestion(set: SetEntry, weight: number, group: { sets: SetEntry[] }) {
@@ -689,7 +734,10 @@ async function removeSheet() {
               width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="text-ok"
             ><path d="M5 12.5l4.5 4.5L19 7" /></svg>
             <span v-else class="mx-[5px] h-2 w-2 rounded-full bg-icon" />
-            <span class="flex-grow text-sm" :class="group.done === group.total ? 'text-muted' : 'text-ink'">{{ group.name }}</span>
+            <span class="flex min-w-0 flex-grow items-baseline gap-1.5 text-sm" :class="group.done === group.total ? 'text-muted' : 'text-ink'">
+              <span class="truncate">{{ group.name }}</span>
+              <TechniqueTag v-if="group.technique" :technique="group.technique" class="shrink-0 text-[11.5px]" />
+            </span>
             <span class="num text-[13px] text-dim">{{ group.done }}/{{ group.total }}</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M6 9l6 6 6-6" /></svg>
           </button>
@@ -747,6 +795,16 @@ async function removeSheet() {
           <Collapse :open="group.exerciseId === openId" :panel-id="`panel-${group.exerciseId}`">
             <div class="flex flex-col gap-2.5 px-3 pb-3 pt-2.5">
               <div
+                v-if="group.technique || lastTechnique(group) !== undefined"
+                class="flex flex-wrap items-center gap-2 px-0.5"
+              >
+                <TechniqueTag v-if="group.technique" :technique="group.technique" chip />
+                <span v-if="lastTechnique(group) !== undefined" class="text-[12px] text-muted">
+                  La última vez: <span class="font-semibold text-ink">{{ lastTechnique(group) ?? 'normal' }}</span>
+                </span>
+              </div>
+
+              <div
                 class="grid gap-1.5 pl-3.5 pr-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint"
                 style="grid-template-columns: 46px 1fr 58px 58px 56px"
               >
@@ -774,13 +832,14 @@ async function removeSheet() {
               <div class="flex flex-col gap-px py-2">
                 <span class="num text-[15px] font-semibold">{{ set.index }}</span>
                 <span
-                  class="num text-[10px]"
-                  :class="set.type === 'failure'
-                    ? 'font-bold text-warn'
-                    : set.type === 'single'
-                      ? 'font-bold text-ink'
-                      : 'text-dim'"
-                >{{ typeLabel(set) }}</span>
+                  class="num text-[10px] leading-tight"
+                  :class="repsOf(set) === 'single' ? 'font-bold text-ink' : 'text-dim'"
+                >{{ targetLabel(set) }}</span>
+                <span
+                  v-if="effortLabel(targetOf(set))"
+                  class="num text-[10px] font-semibold leading-tight"
+                  :class="effortOf(targetOf(set)) === 'failure' ? 'text-warn' : 'text-accent-ink'"
+                >{{ effortLabel(targetOf(set)) }}</span>
               </div>
 
               <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
@@ -813,7 +872,14 @@ async function removeSheet() {
                 :type="readonly ? null : 'button'"
                 @click="!readonly && edit(set, 'reps')"
               >
-                <span class="text-[17px] font-semibold" :class="set.reps == null ? 'text-[14px] text-dim' : ''">
+                <span
+                  class="max-w-full truncate px-1.5 font-semibold"
+                  :class="set.reps != null
+                    ? 'text-[17px]'
+                    : repsOf(set) === 'amrap' || repsOf(set) === 'single'
+                      ? 'text-[11.5px] text-dim'
+                      : 'text-[14px] text-dim'"
+                >
                   {{ set.reps ?? targetLabel(set) }}
                 </span>
                 <span v-if="gainLabel(set)" class="num text-[10px] font-semibold text-ok">{{ gainLabel(set) }}</span>

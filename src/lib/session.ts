@@ -1,10 +1,11 @@
 import { db, newId } from '../db'
 import { addDays, sameWeek, today, weekStart } from './dates'
-import { estimateOneRepMax } from './progress'
+import { estimateOneRepMax, progression } from './progress'
 import { forgetDraft, readDraft } from './draft'
 import { entryTarget } from './targets'
 import { startingWeight } from './bodyweight'
 import { readBodyweightKg } from '../stores/settings'
+import { nextExercises, routineSessions } from './upcoming'
 import type { Routine, Session, SetEntry, SetTemplate } from '../types'
 
 const now = () => Date.now()
@@ -32,6 +33,14 @@ export async function previousSession(exerciseId: string, excludeSessionId?: str
   return done.filter((set) => set.sessionId === lastId).sort((a, b) => a.index - b.index)
 }
 
+export async function carriedSets(exerciseId: string, increment: number, excludeSessionId?: string, before?: string) {
+  const done = await previousSession(exerciseId, excludeSessionId, before)
+  if (done.length === 0) return done
+
+  const sheet = await db.sets.where('[sessionId+exerciseId]').equals([done[0].sessionId, exerciseId]).toArray()
+  return progression(sheet, increment).carried
+}
+
 export async function bestOneRepMax(exerciseId: string, excludeSessionId?: string, before?: string) {
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const done = sets.filter((set) => set.done && set.sessionId !== excludeSessionId && set.reps)
@@ -49,6 +58,7 @@ function entryFrom(
   index: number,
   load: { weight: number | null; bodyweightKg?: number },
   slot: number,
+  technique: string | null = null,
 ): SetEntry {
   return {
     id: newId(),
@@ -57,6 +67,7 @@ function entryFrom(
     slot,
     index,
     ...entryTarget(template),
+    technique,
     ...load,
     reps: null,
     done: false,
@@ -72,9 +83,10 @@ async function usesBodyweight(exerciseId: string) {
 async function templateEntries(routine: Routine, sessionId: string, date: string) {
   const entries: SetEntry[] = []
   const bodyweightKg = readBodyweightKg()
+  const exercises = nextExercises(routine, await routineSessions(routine.id))
 
-  for (const [slot, exercise] of routine.exercises.entries()) {
-    const previous = await previousSession(exercise.exerciseId, sessionId, date)
+  for (const [slot, exercise] of exercises.entries()) {
+    const previous = await carriedSets(exercise.exerciseId, exercise.incrementKg, sessionId, date)
     const bodyweight = await usesBodyweight(exercise.exerciseId)
 
     exercise.sets.forEach((template, position) => {
@@ -87,6 +99,7 @@ async function templateEntries(routine: Routine, sessionId: string, date: string
           position + 1,
           startingWeight(bodyweight, bodyweightKg, before, template),
           slot,
+          exercise.technique ?? null,
         ),
       )
     })
@@ -130,7 +143,7 @@ export async function openWorkout(routine: Routine, planId: string | null, date 
 }
 
 function shapeOf(
-  sets: Array<Pick<SetEntry, 'slot' | 'exerciseId' | 'index' | 'type' | 'targetReps' | 'targetRepsMin' | 'targetRepsMax' | 'targetRirMin' | 'targetRirMax'>>,
+  sets: Array<Pick<SetEntry, 'slot' | 'exerciseId' | 'index' | 'type' | 'targetReps' | 'targetRepsMin' | 'targetRepsMax' | 'targetRirMin' | 'targetRirMax' | 'targetRpe' | 'targetEffort' | 'technique'>>,
 ) {
   return sets
     .map((set) =>
@@ -144,6 +157,9 @@ function shapeOf(
         set.targetRepsMax ?? null,
         set.targetRirMin ?? null,
         set.targetRirMax ?? null,
+        set.targetRpe ?? null,
+        set.targetEffort ?? null,
+        set.technique?.trim().toLowerCase() || null,
       ]),
     )
     .sort()
@@ -161,12 +177,14 @@ export async function followRoutine(sessionId: string) {
   const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
   if (sets.some((set) => set.done)) return
 
-  const planned = routine.exercises.flatMap((exercise, slot) =>
+  const source = nextExercises(routine, await routineSessions(routine.id))
+  const planned = source.flatMap((exercise, slot) =>
     exercise.sets.map((template, position) => ({
       slot,
       exerciseId: exercise.exerciseId,
       index: position + 1,
       ...entryTarget(template),
+      technique: exercise.technique ?? null,
     })),
   )
   if (shapeOf(planned) === shapeOf(sets)) return
@@ -229,6 +247,8 @@ export async function exerciseEntries(sessionId: string, exerciseId: string, slo
         repsMax: set.targetRepsMax,
         rirMin: set.targetRirMin,
         rirMax: set.targetRirMax,
+        rpe: set.targetRpe,
+        effort: set.targetEffort,
         weight: set.weight ?? 0,
       }))
     : Array.from({ length: 3 }, () => ({ type: 'range' as const, repsMin: 8, repsMax: 12, weight: 0 }))

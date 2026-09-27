@@ -13,7 +13,7 @@ const INSTANTS: Partial<Record<SyncTable, string[]>> = {
 
 const NULLABLE: Partial<Record<SyncTable, string[]>> = {
   sessions: ['routineId', 'planId'],
-  sets: ['weight', 'reps', 'doneAt'],
+  sets: ['weight', 'reps', 'doneAt', 'technique'],
 }
 
 const OWNED: SyncTable[] = ['exercises']

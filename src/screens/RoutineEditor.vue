@@ -10,10 +10,13 @@ import ExercisePicker from '../components/ExercisePicker.vue'
 import ExerciseSheet from '../components/ExerciseSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { shortLabel } from '../lib/targets'
+import TechniqueSheet from '../components/TechniqueSheet.vue'
+import { effortLabel, repsLabel, shortLabel } from '../lib/targets'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
-import type { Exercise, Routine, RoutineExercise, SetTemplate, SetType } from '../types'
+import { bySession, dropPlan, findPlan, openPlans, preparePlan, setPlanning } from '../lib/upcoming'
+import TechniqueTag from '../components/TechniqueTag.vue'
+import type { Exercise, ExercisePlanning, Routine, RoutineExercise, Session, SetTemplate, SetType } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,7 +44,7 @@ const INCREMENTS = [1, 2, 2.5, 5, 10, 20]
 const WEIGHT_STEP = 2.5
 
 const routineId = computed(() => String(route.params.id ?? ''))
-const openIndex = ref<number | null>(0)
+const openIndex = ref<number | null>(null)
 const picking = ref(false)
 const targetEditor = ref<{ index: number; position: number } | null>(null)
 const splitWeight = ref(new Set<string>())
@@ -50,24 +53,84 @@ const items = ref<RoutineExercise[]>([])
 interface EditorData {
   routine: Routine | null
   exercises: Exercise[]
+  sessions: Session[]
 }
 
 const data = useLive<EditorData>(
   async () => ({
     routine: (await db.routines.get(routineId.value)) ?? null,
     exercises: await db.exercises.toArray(),
+    sessions: await db.sessions.where('routineId').equals(routineId.value).toArray(),
   }),
-  { routine: null, exercises: [] },
+  { routine: null, exercises: [], sessions: [] },
   routineId,
 )
 
+const plannedId = computed(() => (typeof route.query.upcoming === 'string' ? route.query.upcoming : null))
+
+const editingPlan = computed(() =>
+  data.value.routine && plannedId.value ? findPlan(data.value.routine, plannedId.value) : null,
+)
+
+const planTitle = computed(() => {
+  const found = editingPlan.value
+  if (!found) return ''
+  const position = openPlans(found.exercise, data.value.sessions).findIndex((plan) => plan.id === found.plan.id)
+  return position < 0 ? 'Preparada' : `${position + 1}ª preparada`
+})
+
+const plansOf = (item: RoutineExercise) => openPlans(item, data.value.sessions)
+
+const showsBase = (item: RoutineExercise) => Boolean(plannedId.value) || !bySession(item)
+
+async function choosePlanning(index: number, planning: ExercisePlanning) {
+  const routine = data.value.routine
+  if (!routine) return
+  await setPlanning(routine, index, planning, data.value.sessions)
+}
+
 watch(
-  () => data.value.routine?.exercises,
+  () => {
+    if (!plannedId.value) return data.value.routine?.exercises
+    const found = editingPlan.value
+    return found ? [{ ...found.exercise, sets: found.plan.sets, technique: found.plan.technique }] : undefined
+  },
   (exercises) => {
     items.value = exercises ? [...exercises] : []
   },
   { immediate: true },
 )
+
+watch(plannedId, (id) => { if (id) openIndex.value = 0 }, { immediate: true })
+
+async function prepareFor(index: number) {
+  const routine = data.value.routine
+  if (!routine) return
+  const id = await preparePlan(routine, index, data.value.sessions)
+  if (id) router.push({ query: { upcoming: id } })
+}
+
+async function removePlan() {
+  const routine = data.value.routine
+  const found = editingPlan.value
+  if (!routine || !found) return
+
+  const position = (found.exercise.upcoming ?? []).findIndex((plan) => plan.id === found.plan.id)
+  await dropPlan(routine, found.plan.id)
+  router.back()
+
+  undo.offer('Preparada quitada', async () => {
+    const fresh = await db.routines.get(routine.id)
+    if (!fresh) return
+    const exercises = fresh.exercises.map((exercise, spot) => {
+      if (spot !== found.index) return exercise
+      const list = [...(exercise.upcoming ?? [])]
+      list.splice(Math.max(position, 0), 0, found.plan)
+      return { ...exercise, upcoming: list }
+    })
+    await db.routines.update(routine.id, { exercises: plain(exercises), updatedAt: Date.now() })
+  })
+}
 
 const nameOf = (id: string) => data.value.exercises.find((exercise) => exercise.id === id)?.name ?? '—'
 
@@ -79,6 +142,25 @@ const totalSets = computed(() => items.value.reduce((count, item) => count + ite
 async function save(exercises: RoutineExercise[]) {
   const routine = data.value.routine
   if (!routine) return
+
+  const found = editingPlan.value
+  if (plannedId.value) {
+    const edited = exercises[0]
+    if (!found || !edited) return
+    const updated = routine.exercises.map((exercise, spot) =>
+      spot === found.index
+        ? {
+            ...exercise,
+            upcoming: (exercise.upcoming ?? []).map((plan) =>
+              plan.id === found.plan.id ? { ...plan, sets: edited.sets, technique: edited.technique } : plan,
+            ),
+          }
+        : exercise,
+    )
+    await db.routines.update(routine.id, { exercises: plain(updated), updatedAt: Date.now() })
+    return
+  }
+
   await db.routines.update(routine.id, { exercises: plain(exercises), updatedAt: Date.now() })
 }
 
@@ -189,6 +271,15 @@ function applyTarget(changes: Partial<SetTemplate>, all: boolean) {
   return replace(current.spot.index, { sets })
 }
 
+const techniqueFor = ref<number | null>(null)
+
+function applyTechnique(technique: string | null) {
+  const index = techniqueFor.value
+  techniqueFor.value = null
+  if (index === null) return
+  return replace(index, { technique: technique ?? undefined })
+}
+
 function shiftWeight(index: number, direction: -1 | 1) {
   const item = items.value[index]
   if (!item) return
@@ -282,7 +373,6 @@ async function addExercise(exerciseId: string) {
     ],
     restSec: null,
     incrementKg: 2.5,
-    alternativeIds: [],
   }]
 
   picking.value = false
@@ -316,18 +406,25 @@ function restLabel(item: RoutineExercise) {
 </script>
 
 <template>
-  <div v-if="data.routine" class="relative flex h-full flex-col overflow-hidden">
+  <div v-if="data.routine && (!plannedId || editingPlan)" class="relative flex h-full flex-col overflow-hidden">
     <header class="flex items-center gap-2.5 border-b border-line px-4 py-2.5">
       <button class="-ml-2.5 flex h-11 w-11 items-center justify-center text-muted" type="button" @click="router.back()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
       </button>
       <div class="flex flex-grow flex-col gap-0.5">
-        <input
-          class="w-full bg-transparent text-lg font-bold tracking-[-0.01em] outline-none"
-          :value="data.routine.name"
-          @change="rename(($event.target as HTMLInputElement).value)"
-        />
-        <span class="num text-xs text-dim">{{ items.length }} ejercicios · {{ totalSets }} series</span>
+        <template v-if="editingPlan">
+          <span class="text-[11px] font-bold uppercase tracking-[0.08em] text-accent">{{ planTitle }}</span>
+          <h1 class="text-lg font-bold leading-tight tracking-[-0.01em]">{{ nameOf(editingPlan.exercise.exerciseId) }}</h1>
+          <span class="num text-xs text-dim">{{ data.routine.name }} · {{ totalSets }} series</span>
+        </template>
+        <template v-else>
+          <input
+            class="w-full bg-transparent text-lg font-bold tracking-[-0.01em] outline-none"
+            :value="data.routine.name"
+            @change="rename(($event.target as HTMLInputElement).value)"
+          />
+          <span class="num text-xs text-dim">{{ items.length }} ejercicios · {{ totalSets }} series</span>
+        </template>
       </div>
       <button
         class="flex h-11 items-center rounded-2xl bg-accent px-4 text-sm font-bold text-hero-ink"
@@ -365,13 +462,21 @@ function restLabel(item: RoutineExercise) {
               </span>
               <span class="flex flex-grow flex-col gap-1">
                 <span class="text-[15px] font-semibold">{{ nameOf(item.exerciseId) }}</span>
-                <span class="num text-[11.5px] text-sub">{{ summary(item) }} · {{ restLabel(item) }}</span>
+                <span v-if="bySession(item)" class="num text-[11.5px] text-sub">
+                  Sesión a sesión ·
+                  <span v-if="plansOf(item).length" class="font-semibold text-accent-ink">{{ plansOf(item).length }} {{ plansOf(item).length === 1 ? 'preparada' : 'preparadas' }}</span>
+                  <span v-else class="font-semibold text-warn">sin planificar</span>
+                  · {{ restLabel(item) }}
+                </span>
+                <span v-else class="num text-[11.5px] text-sub">
+                  {{ summary(item) }} · {{ restLabel(item) }}<template v-if="item.technique"> · <TechniqueTag :technique="item.technique" /></template>
+                </span>
               </span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M6 9l6 6 6-6" /></svg>
             </button>
 
             <div v-else class="flex items-center gap-2.5 px-3.5 pt-3.5">
-                <span class="drag-handle flex cursor-grab touch-none text-icon">
+                <span v-if="!plannedId" class="drag-handle flex cursor-grab touch-none text-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" />
                     <circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
@@ -385,7 +490,7 @@ function restLabel(item: RoutineExercise) {
                 >
                   <h2 class="text-[15px] font-bold">{{ nameOf(item.exerciseId) }}</h2>
                 </button>
-                <button class="flex h-9 w-9 items-center justify-center rounded-xl border border-line-btn text-danger" type="button" @click="removeExercise(index)">
+                <button v-if="!plannedId" class="flex h-9 w-9 items-center justify-center rounded-xl border border-line-btn text-danger" type="button" @click="removeExercise(index)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" /></svg>
                 </button>
                 <button class="flex h-10 w-10 items-center justify-center rounded-xl text-icon" type="button" :aria-expanded="true" @click="openIndex = null">
@@ -395,6 +500,24 @@ function restLabel(item: RoutineExercise) {
 
             <Collapse :open="openIndex === index">
               <div class="flex flex-col gap-3 px-3.5 pb-3.5 pt-3">
+              <div v-if="!plannedId" class="-mt-1 flex h-10 items-center gap-2.5">
+                <span class="flex-grow text-[13px] text-muted">Planificar sesión a sesión</span>
+                <button
+                  class="flex h-7 w-12 items-center rounded-full p-0.5 transition-colors"
+                  :class="bySession(item) ? 'bg-accent' : 'bg-line-btn'"
+                  type="button"
+                  role="switch"
+                  :aria-checked="bySession(item)"
+                  @click="choosePlanning(Number(index), bySession(item) ? 'fixed' : 'sessions')"
+                >
+                  <span
+                    class="h-6 w-6 rounded-full bg-surface shadow-card transition-transform"
+                    :class="bySession(item) ? 'translate-x-5' : ''"
+                  />
+                </button>
+              </div>
+
+              <template v-if="showsBase(item)">
               <div class="flex items-center gap-2.5">
                 <span class="flex-grow text-[13px] text-muted">Series</span>
                 <button class="flex h-11 w-11 items-center justify-center rounded-xl border border-line-btn bg-surface-2 text-muted" type="button" @click="removeSet(index)">
@@ -418,13 +541,29 @@ function restLabel(item: RoutineExercise) {
                   >
                     <span class="num text-[10px] text-dim">S{{ position + 1 }}</span>
                     <span class="num text-[12.5px] font-semibold text-accent-ink">
-                      {{ shortLabel(template) }}
+                      {{ repsLabel(template) }}
+                    </span>
+                    <span v-if="effortLabel(template)" class="num text-[10.5px] font-semibold text-accent-ink">
+                      {{ effortLabel(template) }}
                     </span>
                   </button>
                 </div>
               </div>
 
+              <button
+                class="flex h-12 items-center gap-2.5 border-t border-line text-left"
+                type="button"
+                @click="techniqueFor = Number(index)"
+              >
+                <span class="flex-grow text-[13px] text-muted">Técnica</span>
+                <TechniqueTag v-if="item.technique" :technique="item.technique" class="text-[13px]" />
+                <span v-else class="text-[13px] font-semibold text-dim">Normal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+              </template>
+
               <div class="flex flex-col">
+                <template v-if="showsBase(item)">
                 <div class="flex h-12 items-center gap-2.5 border-t border-line">
                   <span class="flex-grow text-[13px] text-muted">Mismo peso en todas las series</span>
                   <button
@@ -494,7 +633,9 @@ function restLabel(item: RoutineExercise) {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
                   </button>
                 </div>
+                </template>
 
+                <template v-if="!plannedId">
                 <div class="flex h-12 items-center gap-2.5 border-t border-line">
                   <span class="flex-grow text-[13px] text-muted">Contador de descanso</span>
                   <button
@@ -541,6 +682,43 @@ function restLabel(item: RoutineExercise) {
                     >+{{ String(step).replace('.', ',') }}</button>
                   </div>
                 </div>
+
+                <div v-if="bySession(item)" class="flex flex-col gap-2 border-t border-line pt-3">
+                  <div class="flex flex-col gap-0.5">
+                    <span class="text-[13px] text-muted">Próximas sesiones</span>
+                    <span v-if="plansOf(item).length === 0" class="text-[11.5px] font-medium text-warn">
+                      Sin planificar: se repetirá la última que hiciste.
+                    </span>
+                  </div>
+
+                  <RouterLink
+                    v-for="(plan, position) in plansOf(item)"
+                    :key="plan.id"
+                    :to="{ query: { upcoming: plan.id } }"
+                    class="flex items-center gap-2.5 rounded-xl border px-3 py-2.5"
+                    :class="position === 0 ? 'border-accent bg-accent-soft' : 'border-line-btn bg-surface-2'"
+                  >
+                    <span class="flex flex-grow flex-col gap-0.5">
+                      <span class="text-[10.5px] font-bold uppercase tracking-[0.08em]" :class="position === 0 ? 'text-accent' : 'text-faint'">
+                        {{ position + 1 }}ª{{ position === 0 ? ' · la próxima' : '' }}
+                      </span>
+                      <span class="num text-[12.5px] text-sub">
+                        {{ summary({ ...item, sets: plan.sets }) }}<template v-if="plan.technique"> · <TechniqueTag :technique="plan.technique" /></template>
+                      </span>
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-icon"><path d="M9 6l6 6-6 6" /></svg>
+                  </RouterLink>
+
+                  <button
+                    class="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-line-btn text-[13px] font-medium text-muted"
+                    type="button"
+                    @click="prepareFor(Number(index))"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    Preparar la siguiente
+                  </button>
+                </div>
+                </template>
               </div>
               </div>
             </Collapse>
@@ -549,6 +727,7 @@ function restLabel(item: RoutineExercise) {
       </draggable>
 
       <button
+        v-if="!plannedId"
         class="flex h-13 items-center justify-center gap-2 rounded-2xl border border-dashed border-line-btn text-sm font-medium text-muted"
         type="button"
         @click="picking = true"
@@ -558,6 +737,17 @@ function restLabel(item: RoutineExercise) {
       </button>
 
       <button
+        v-if="plannedId"
+        class="mt-2 flex h-13 items-center gap-2.5 rounded-2xl border border-line bg-surface px-3.5 text-danger shadow-card"
+        type="button"
+        @click="removePlan"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" /></svg>
+        <span class="flex-grow text-left text-[14.5px] font-semibold">Quitar esta preparada</span>
+      </button>
+
+      <button
+        v-else
         class="mt-2 flex h-13 items-center gap-2.5 rounded-2xl border border-line bg-surface px-3.5 text-danger shadow-card"
         type="button"
         @click="askRemoveRoutine"
@@ -575,6 +765,15 @@ function restLabel(item: RoutineExercise) {
       :exercise-name="editingTarget.name"
       @apply="applyTarget"
       @close="targetEditor = null"
+    />
+
+    <TechniqueSheet
+      v-else-if="techniqueFor !== null && items[techniqueFor]"
+      :value="items[techniqueFor].technique ?? null"
+      :exercise-name="nameOf(items[techniqueFor].exerciseId)"
+      :subtitle="plannedId ? 'Solo para esta preparada' : 'Para todas las series de este ejercicio en la rutina'"
+      @apply="applyTechnique"
+      @close="techniqueFor = null"
     />
 
     <ExercisePicker

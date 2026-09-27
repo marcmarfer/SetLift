@@ -10,6 +10,7 @@ import AccountButton from '../components/AccountButton.vue'
 import SwitchPlanSheet from '../components/SwitchPlanSheet.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LogSheet, { type LoggedSheet } from '../components/LogSheet.vue'
+import { nextExercises, unplanned } from '../lib/upcoming'
 import { markLater, openFreeWorkout, openFreestyleWorkout, openWorkout, removeSession, sheetName, skipRoutine } from '../lib/session'
 import { forgetDraft } from '../lib/draft'
 import { useUndoStore } from '../stores/undo'
@@ -207,7 +208,7 @@ const confirming = ref<{
 } | null>(null)
 
 function warnEmpty(target: Routine) {
-  if (target.exercises.length > 0) return false
+  if (nextExercises(target, data.value.sessions).length > 0) return false
 
   confirming.value = {
     title: `${target.name} no tiene ejercicios`,
@@ -483,11 +484,25 @@ const routine = computed(() => {
   return current.routines.find((candidate) => candidate.id === due) ?? null
 })
 
-const exerciseNames = computed(() => {
+const dueExercises = computed(() =>
+  routine.value ? nextExercises(routine.value, data.value.sessions) : [],
+)
+
+const dueUnplanned = computed(() => {
   const current = data.value
   if (!routine.value) return ''
-  return routine.value.exercises
+  return unplanned(routine.value, current.sessions)
     .map((item) => current.exercises.find((exercise) => exercise.id === item.exerciseId)?.name ?? '—')
+    .join(', ')
+})
+
+const exerciseNames = computed(() => {
+  const current = data.value
+  return dueExercises.value
+    .map((item) => {
+      const name = current.exercises.find((exercise) => exercise.id === item.exerciseId)?.name ?? '—'
+      return item.technique ? `${name} (${item.technique.toLowerCase()})` : name
+    })
     .join(' · ')
 })
 
@@ -774,13 +789,18 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           <span v-else class="num text-[13px] text-hero-muted">sin registros</span>
         </div>
 
-        <p v-if="routine.exercises.length === 0" class="text-[12.5px] leading-[1.55] text-hero-muted">
+        <p v-if="dueExercises.length === 0" class="text-[12.5px] leading-[1.55] text-hero-muted">
           Esta rutina no tiene ejercicios todavía. Añade al menos uno para poder empezarla.
         </p>
         <p v-else class="text-[12.5px] leading-[1.55] text-hero-muted">{{ exerciseNames }}</p>
+        <RouterLink
+          v-if="dueUnplanned && dueExercises.length"
+          :to="`/routines/${routine.id}`"
+          class="-mt-2 text-[12px] font-semibold text-accent"
+        >Sin planificar: {{ dueUnplanned }}. Se repetirá la última.</RouterLink>
 
         <RouterLink
-          v-if="routine.exercises.length === 0"
+          v-if="dueExercises.length === 0"
           :to="`/routines/${routine.id}`"
           class="flex h-16 items-center justify-center gap-2.5 rounded-[32px] bg-accent text-[19px] font-bold tracking-[-0.01em] text-hero-ink"
         >
@@ -798,7 +818,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         </button>
 
         <button
-          v-if="canMarkLater && routine.exercises.length > 0"
+          v-if="canMarkLater && dueExercises.length > 0"
           class="flex h-8 items-center justify-center gap-1.5 text-[12.5px] font-medium text-hero-muted"
           type="button"
           @click="fillLater"

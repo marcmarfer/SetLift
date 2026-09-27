@@ -16,7 +16,11 @@ export interface Tombstone {
 
 export type PlanMode = 'weekly' | 'rotation'
 
-export type SetType = 'fixed' | 'range' | 'rir' | 'failure' | 'single'
+export type RepsTarget = 'fixed' | 'range' | 'single' | 'amrap'
+
+export type SetType = RepsTarget | 'rir' | 'failure'
+
+export type EffortTarget = 'rpe' | 'rir' | 'failure'
 
 export interface ExerciseFamily {
   id: string
@@ -53,6 +57,8 @@ export interface SetTemplate {
   repsMax?: number
   rirMin?: number
   rirMax?: number
+  rpe?: number
+  effort?: EffortTarget
   weight?: number
 }
 
@@ -61,8 +67,19 @@ export interface RoutineExercise {
   sets: SetTemplate[]
   restSec: number | null
   incrementKg: number
-  alternativeIds: string[]
+  technique?: string
+  planning?: ExercisePlanning
+  upcoming?: PlannedSets[]
   supersetGroup?: number
+}
+
+export type ExercisePlanning = 'fixed' | 'sessions'
+
+export interface PlannedSets {
+  id: string
+  sets: SetTemplate[]
+  technique?: string
+  usedBy?: string
 }
 
 export interface Routine {
@@ -109,6 +126,9 @@ export interface SetEntry {
   targetRepsMax?: number
   targetRirMin?: number
   targetRirMax?: number
+  targetRpe?: number
+  targetEffort?: EffortTarget
+  technique?: string | null
   weight: number | null
   bodyweightKg?: number
   reps: number | null
