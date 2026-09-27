@@ -143,13 +143,20 @@ export const useAuthStore = defineStore('auth', () => {
   const linkFlowId = ref<string | null>(null)
   const linkToken = ref<{ hash: string; type: 'recovery' | 'email' } | null>(null)
 
-  function unlock(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
+  async function leaveDevice(leaving: string | null) {
+    await clearDevice()
+    useSettingsStore().reset()
+    forget()
+    forgetRecovery()
+    if (leaving) forgetSyncState(leaving)
+  }
+
+  async function unlock(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
     const previous = rememberedUserId()
     if (previous && previous !== user.id) {
-      error.value = 'Esa cuenta no es la de este dispositivo.'
-      phase.value = 'anonymous'
-      supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-      return
+      await leaveDevice(previous)
+      displayName.value = null
+      photoUrl.value = null
     }
 
     userId.value = user.id
@@ -180,7 +187,7 @@ export const useAuthStore = defineStore('auth', () => {
       return 'challenge'
     }
 
-    unlock(session.user)
+    await unlock(session.user)
     return phase.value
   }
 
@@ -348,7 +355,10 @@ export const useAuthStore = defineStore('auth', () => {
       phase.value = await settle(data.session)
       return true
     } catch (problem) {
-      error.value = translate(problem)
+      error.value =
+        token?.type === 'email' && /otp_expired/i.test(describe(problem))
+          ? 'Este enlace ya se ha usado o ha caducado. Si ya confirmaste el email, entra con tu contraseña.'
+          : translate(problem)
       phase.value = rememberedUserId() ? 'ready' : 'anonymous'
       return false
     } finally {
@@ -415,7 +425,7 @@ export const useAuthStore = defineStore('auth', () => {
         code: code.trim().replace(/\s/g, ''),
       })
       if (failed) throw failed
-      if (data) unlock(data.user)
+      if (data) await unlock(data.user)
       return phase.value === 'ready'
     } catch (problem) {
       error.value = translate(problem)
@@ -463,7 +473,7 @@ export const useAuthStore = defineStore('auth', () => {
         code: code.trim().replace(/\s/g, ''),
       })
       if (failed) throw failed
-      if (data) unlock(data.user)
+      if (data) await unlock(data.user)
       return phase.value === 'ready'
     } catch (problem) {
       error.value = translate(problem)
@@ -565,11 +575,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    await clearDevice()
-    settings.reset()
-    forget()
-    forgetRecovery()
-    if (leaving) forgetSyncState(leaving)
+    await leaveDevice(leaving)
     userId.value = null
     email.value = null
     needsReauth.value = false
@@ -618,7 +624,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (!session || phase.value === 'recovery') return
 
       if (phase.value === 'ready') {
-        unlock(session.user)
+        void unlock(session.user)
         return
       }
 
