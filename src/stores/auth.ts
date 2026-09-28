@@ -355,6 +355,13 @@ export const useAuthStore = defineStore('auth', () => {
       phase.value = await settle(data.session)
       return true
     } catch (problem) {
+      if (/pkce_code_verifier_not_found/i.test(describe(problem))) {
+        linkCode.value = null
+        linkFlowId.value = null
+        phase.value = rememberedUserId() ? 'ready' : 'anonymous'
+        return true
+      }
+
       error.value =
         token?.type === 'email' && /otp_expired/i.test(describe(problem))
           ? 'Este enlace ya se ha usado o ha caducado. Si ya confirmaste el email, entra con tu contraseña.'
