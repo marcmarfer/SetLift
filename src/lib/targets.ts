@@ -54,9 +54,9 @@ export function effortOf(target: Pick<Target, 'type' | 'effort' | 'rpe'>): Effor
 
 const EFFORTS_BY_REPS: Record<RepsTarget, Array<EffortTarget | null>> = {
   range: [null, 'rpe', 'rir', 'failure'],
-  fixed: [null, 'rpe', 'rir', 'failure'],
+  fixed: [null, 'rpe', 'rir'],
   single: [null, 'rpe'],
-  amrap: [null, 'rpe', 'rir'],
+  amrap: [null],
 }
 
 export const allowsEffort = (reps: RepsTarget, effort: EffortTarget | null) =>

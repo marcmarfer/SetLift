@@ -195,7 +195,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         </div>
       </div>
 
-      <div class="flex flex-col gap-2">
+      <div v-if="effortModes.length > 1" class="flex flex-col gap-2">
         <span class="text-[13px] text-muted">Esfuerzo</span>
         <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${effortModes.length}, minmax(0, 1fr))` }">
           <button

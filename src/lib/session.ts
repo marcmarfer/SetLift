@@ -5,7 +5,7 @@ import { forgetDraft, readDraft } from './draft'
 import { entryTarget } from './targets'
 import { startingWeight } from './bodyweight'
 import { readBodyweightKg } from '../stores/settings'
-import { nextExercises, routineSessions } from './upcoming'
+import { bySession, nextExercises, routineSessions } from './upcoming'
 import type { Routine, Session, SetEntry, SetTemplate } from '../types'
 
 const now = () => Date.now()
@@ -90,7 +90,8 @@ async function templateEntries(routine: Routine, sessionId: string, date: string
     const bodyweight = await usesBodyweight(exercise.exerciseId)
 
     exercise.sets.forEach((template, position) => {
-      const before = previous[position] ?? previous[previous.length - 1]
+      const planned = bySession(exercise) && Boolean(template.weight)
+      const before = planned ? undefined : previous[position] ?? previous[previous.length - 1]
       entries.push(
         entryFrom(
           sessionId,
@@ -142,9 +143,7 @@ export async function openWorkout(routine: Routine, planId: string | null, date 
   return sessionId
 }
 
-function shapeOf(
-  sets: Array<Pick<SetEntry, 'slot' | 'exerciseId' | 'index' | 'type' | 'targetReps' | 'targetRepsMin' | 'targetRepsMax' | 'targetRirMin' | 'targetRirMax' | 'targetRpe' | 'targetEffort' | 'technique'>>,
-) {
+function shapeOf(sets: SetEntry[], weighed: Set<number>) {
   return sets
     .map((set) =>
       JSON.stringify([
@@ -160,6 +159,7 @@ function shapeOf(
         set.targetRpe ?? null,
         set.targetEffort ?? null,
         set.technique?.trim().toLowerCase() || null,
+        weighed.has(set.slot ?? -1) ? set.weight : null,
       ]),
     )
     .sort()
@@ -178,18 +178,10 @@ export async function followRoutine(sessionId: string) {
   if (sets.some((set) => set.done)) return
 
   const source = nextExercises(routine, await routineSessions(routine.id))
-  const planned = source.flatMap((exercise, slot) =>
-    exercise.sets.map((template, position) => ({
-      slot,
-      exerciseId: exercise.exerciseId,
-      index: position + 1,
-      ...entryTarget(template),
-      technique: exercise.technique ?? null,
-    })),
-  )
-  if (shapeOf(planned) === shapeOf(sets)) return
-
+  const weighed = new Set(source.flatMap((exercise, slot) => (bySession(exercise) ? [slot] : [])))
   const entries = await templateEntries(routine, sessionId, session.date)
+  if (shapeOf(entries, weighed) === shapeOf(sets, weighed)) return
+
   await db.transaction('rw', db.sets, async () => {
     await db.sets.where('sessionId').equals(sessionId).delete()
     await db.sets.bulkPut(entries)
