@@ -7,6 +7,7 @@ export const useRestStore = defineStore('rest', () => {
   const enabled = ref(true)
   const nextLabel = ref('')
 
+  let endsAt = 0
   let ticker: ReturnType<typeof setInterval> | null = null
 
   function stopTicker() {
@@ -14,21 +15,26 @@ export const useRestStore = defineStore('rest', () => {
     ticker = null
   }
 
+  function tick() {
+    if (!ticker) return
+    secondsLeft.value = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))
+    if (secondsLeft.value <= 0) skip()
+  }
+
   function start(seconds: number, label: string) {
     if (!enabled.value || seconds <= 0) return
-    total.value = seconds
-    secondsLeft.value = seconds
-    nextLabel.value = label
     stopTicker()
-    ticker = setInterval(() => {
-      secondsLeft.value -= 1
-      if (secondsLeft.value <= 0) skip()
-    }, 1000)
+    endsAt = Date.now() + seconds * 1000
+    total.value = seconds
+    nextLabel.value = label
+    ticker = setInterval(tick, 500)
+    tick()
   }
 
   function add(seconds: number) {
-    if (secondsLeft.value <= 0) return
-    secondsLeft.value = Math.max(0, secondsLeft.value + seconds)
+    if (!ticker) return
+    endsAt += seconds * 1000
+    tick()
     total.value = Math.max(total.value, secondsLeft.value)
   }
 
@@ -42,6 +48,8 @@ export const useRestStore = defineStore('rest', () => {
     enabled.value = value
     if (!value) skip()
   }
+
+  document.addEventListener('visibilitychange', tick)
 
   return { secondsLeft, total, enabled, nextLabel, start, add, skip, setEnabled }
 })
