@@ -420,38 +420,49 @@ function defaultReps(set: SetEntry, group: { previous: SetEntry[] }) {
   return before?.reps ?? null
 }
 
-function toggle(set: SetEntry, group: { restSec: number | null; previous: SetEntry[]; sets: SetEntry[]; name: string }) {
-  const reps = set.done ? null : defaultReps(set, group)
-  if (!set.done && reps == null) {
-    edit(set, 'reps')
-    return
-  }
+type ToggleGroup = { restSec: number | null; previous: SetEntry[]; sets: SetEntry[] }
 
-  const target = change(set.id)
-  if (!target) return
-
-  if (target.done) {
+function toggle(set: SetEntry, group: ToggleGroup) {
+  if (set.done) {
+    const target = change(set.id)
+    if (!target) return
     target.done = false
     target.doneAt = null
     save()
     return
   }
 
+  const reps = defaultReps(set, group)
+  if (reps == null) {
+    edit(set, 'reps')
+    return
+  }
+
+  complete(set, reps, group)
+}
+
+function complete(set: SetEntry, reps: number, group: ToggleGroup) {
+  const target = change(set.id)
+  if (!target) return
+
+  const wasDone = target.done
   target.reps = reps
   target.done = true
-  target.doneAt = Date.now()
+  target.doneAt ??= Date.now()
   save()
 
-  if (isPast.value) return
+  if (wasDone || isPast.value) return
+
+  const pending = group.sets.filter((candidate) => candidate.id !== set.id && !candidate.done)
+  const next = pending.find((candidate) => candidate.index > set.index) ?? pending[0]
+  if (!next) {
+    rest.skip()
+    return
+  }
 
   if (group.restSec == null) return
 
-  const next = group.sets.find((candidate) => candidate.index > set.index && !candidate.done)
-  const label = next
-    ? `Serie ${next.index} · ${format(next.weight ?? 0)} kg × ${targetLabel(next)}`
-    : `${group.name} completado`
-
-  rest.start(group.restSec, label)
+  rest.start(group.restSec, `Serie ${next.index} · ${format(next.weight ?? 0)} kg × ${targetLabel(next)}`)
 }
 
 function lastTechnique(group: WorkoutGroup) {
@@ -527,8 +538,9 @@ function commitAndAdvance(value: number | null) {
 
   if (field === 'reps') {
     const fresh = editingSet.value
-    if (fresh) toggle({ ...fresh, done: false }, group)
+    const reps = fresh ? fresh.reps ?? defaultReps(fresh, group) : null
     editing.value = null
+    if (fresh && reps != null) complete(fresh, reps, group)
     return
   }
 
