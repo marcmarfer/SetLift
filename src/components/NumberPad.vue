@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useSheetDrag } from '../composables/useSheetDrag'
 
 const props = defineProps<{
   field: 'weight' | 'reps'
@@ -13,6 +14,9 @@ const emit = defineEmits<{
   (event: 'next', value: number | null): void
   (event: 'close'): void
 }>()
+
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
 
 const draft = ref(props.value == null ? '' : String(props.value).replace('.', ','))
 
@@ -62,15 +66,17 @@ function pick(reps: number) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-3.5 pt-2.5 pb-4">
-    <div class="flex justify-center">
-      <span class="h-1 w-9 rounded-sm bg-line-btn" />
-    </div>
+  <div ref="panel" class="flex flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-3.5 pb-4">
+    <div class="flex touch-none select-none flex-col gap-3 pt-2.5" @pointerdown="drag">
+      <div class="flex justify-center">
+        <span class="h-1 w-9 rounded-sm bg-line-btn" />
+      </div>
 
-    <div class="flex items-center gap-2">
-      <span class="text-[13px] font-semibold">{{ field === 'weight' ? 'Peso' : 'Reps' }}</span>
-      <span class="flex-grow" />
-      <span class="text-xs text-dim">{{ context }}</span>
+      <div class="flex items-center gap-2">
+        <span class="text-[13px] font-semibold">{{ field === 'weight' ? 'Peso' : 'Reps' }}</span>
+        <span class="flex-grow" />
+        <span class="text-xs text-dim">{{ context }}</span>
+      </div>
     </div>
 
     <div v-if="field === 'reps'" class="flex items-center gap-1.5 overflow-x-auto">

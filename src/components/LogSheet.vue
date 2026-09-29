@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import { longDay } from '../lib/dates'
 import Calendar from './Calendar.vue'
 import type { Routine } from '../types'
@@ -23,6 +24,9 @@ const emit = defineEmits<{
   (event: 'close'): void
 }>()
 
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
+
 const date = computed({
   get: () => props.date,
   set: (value: string) => emit('update:date', value),
@@ -43,21 +47,14 @@ const available = computed(() => (trained.value ? [] : props.routines))
 
 <template>
   <div class="absolute inset-0 z-20 flex flex-col justify-end bg-black/40" @click.self="emit('close')">
-    <div class="flex max-h-[92%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4">
-      <div class="flex shrink-0 justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
+    <div ref="panel" class="flex max-h-[92%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4">
+      <div class="flex shrink-0 touch-none select-none flex-col gap-3 pt-3" @pointerdown="drag">
+        <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
 
-      <div class="flex shrink-0 items-start gap-3">
-        <div class="flex flex-grow flex-col gap-1">
+        <div class="flex flex-col gap-1">
           <h2 class="text-lg font-bold tracking-[-0.01em]">{{ trained ? 'Editar o añadir' : 'Apuntar un entreno' }}</h2>
           <p class="text-[12.5px] text-muted">{{ longDay(date) }}</p>
         </div>
-        <button
-          class="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
-          type="button"
-          @click="emit('close')"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
       </div>
 
       <div class="-mr-2 flex flex-col gap-3 overflow-y-auto pr-2">

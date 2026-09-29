@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import type { ExerciseDraft, ExerciseUsage } from '../lib/exercises'
 
 const props = defineProps<{
@@ -15,6 +16,9 @@ const emit = defineEmits<{
   (event: 'merge'): void
   (event: 'close'): void
 }>()
+
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
 
 const used = computed(() => (props.usage?.sets ?? 0) > 0)
 
@@ -43,18 +47,11 @@ function save() {
 
 <template>
   <div class="absolute inset-0 z-30 flex flex-col justify-end bg-black/40" @click.self="emit('close')">
-    <div class="flex max-h-[92%] flex-col gap-3.5 overflow-y-auto rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4">
-      <div class="flex shrink-0 justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
+    <div ref="panel" class="flex max-h-[92%] flex-col gap-3.5 overflow-y-auto rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4">
+      <div class="flex shrink-0 touch-none select-none flex-col gap-3.5 pt-3" @pointerdown="drag">
+        <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
 
-      <div class="flex shrink-0 items-start gap-3">
-        <h2 class="flex-grow text-lg font-bold tracking-[-0.01em]">{{ title }}</h2>
-        <button
-          class="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
-          type="button"
-          @click="emit('close')"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
+        <h2 class="text-lg font-bold tracking-[-0.01em]">{{ title }}</h2>
       </div>
 
       <label class="flex flex-col gap-1.5">

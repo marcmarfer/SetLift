@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { db, newId } from '../db'
 import { useLive } from '../composables/useLive'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import { timeAgo, weekStart } from '../lib/dates'
 import { dueRoutine } from '../lib/plan'
 import { pruneRoutines, restoreRoutines } from '../lib/routines'
@@ -18,6 +19,9 @@ const undo = useUndoStore()
 const planId = computed(() => String(route.params.id ?? ''))
 const adding = ref(false)
 const switching = ref<Plan | null>(null)
+
+const addingPanel = ref<HTMLElement | null>(null)
+const addingDrag = useSheetDrag(addingPanel, () => (adding.value = false))
 
 interface PlanEditorData {
   plan: Plan | null
@@ -251,21 +255,14 @@ async function activate() {
       class="absolute inset-0 z-20 flex flex-col justify-end bg-black/40"
       @click.self="adding = false"
     >
-      <div class="flex max-h-[80%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4">
-        <div class="flex shrink-0 justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
+      <div ref="addingPanel" class="flex max-h-[80%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4">
+        <div class="flex shrink-0 touch-none select-none flex-col gap-3 pt-3" @pointerdown="addingDrag">
+          <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
 
-        <div class="flex shrink-0 items-start gap-3">
-          <div class="flex flex-grow flex-col gap-1">
+          <div class="flex flex-col gap-1">
             <h2 class="text-lg font-bold tracking-[-0.01em]">Añadir rutina</h2>
             <p class="text-[12.5px] text-muted">Las rutinas se comparten entre planes</p>
           </div>
-          <button
-            class="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
-            type="button"
-            @click="adding = false"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
         </div>
 
         <div class="-mr-2 flex flex-col gap-2 overflow-y-auto pr-2">

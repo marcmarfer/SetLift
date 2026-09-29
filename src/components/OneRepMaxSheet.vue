@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import { today } from '../lib/dates'
 import Calendar from './Calendar.vue'
 import NumberPad from './NumberPad.vue'
@@ -15,6 +16,9 @@ const emit = defineEmits<{
   (event: 'clear'): void
   (event: 'close'): void
 }>()
+
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
 
 const step = ref<'weight' | 'date'>('weight')
 const draftWeight = ref<number | null>(props.weight)
@@ -47,24 +51,16 @@ const format = (value: number) => String(value).replace('.', ',')
       @close="emit('close')"
     />
 
-    <div v-else class="flex max-h-[92%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4">
-      <div class="flex shrink-0 justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
+    <div v-else ref="panel" class="flex max-h-[92%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4">
+      <div class="flex shrink-0 touch-none select-none flex-col gap-3 pt-3" @pointerdown="drag">
+        <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
 
-      <div class="flex shrink-0 items-start gap-3">
-        <div class="flex flex-grow flex-col gap-1">
+        <div class="flex flex-col gap-1">
           <h2 class="text-lg font-bold tracking-[-0.01em]">¿Qué día lo hiciste?</h2>
           <button class="num self-start text-[12.5px] font-semibold text-accent" type="button" @click="step = 'weight'">
             {{ draftWeight == null ? '—' : format(draftWeight) }} kg · cambiar
           </button>
         </div>
-        <button
-          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
-          type="button"
-          aria-label="Cerrar"
-          @click="emit('close')"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
       </div>
 
       <div class="-mr-2 flex flex-col overflow-y-auto pr-2"><Calendar v-model="draftDate" compact /></div>

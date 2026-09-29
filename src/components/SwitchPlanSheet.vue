@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import type { Plan } from '../types'
 
 defineProps<{
@@ -11,18 +13,23 @@ const emit = defineEmits<{
   (event: 'confirm'): void
   (event: 'close'): void
 }>()
+
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
 </script>
 
 <template>
   <div class="absolute inset-0 z-20 flex flex-col justify-end bg-black/40" @click.self="emit('close')">
-    <div class="flex flex-col gap-3.5 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4.5 shadow-hero">
-      <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
+    <div ref="panel" class="flex flex-col gap-3.5 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4.5 shadow-hero">
+      <div class="flex touch-none select-none flex-col gap-3.5 pt-3" @pointerdown="drag">
+        <div class="flex justify-center"><span class="h-1 w-9 rounded-sm bg-line-btn" /></div>
 
-      <div class="flex flex-col gap-1.5">
-        <h2 class="text-[19px] font-bold tracking-[-0.02em]">Activar {{ plan.name }}</h2>
-        <p v-if="dueName" class="text-[13.5px] leading-relaxed text-muted">
-          Hoy te tocaba <span class="font-semibold text-ink">{{ dueName }}</span> del plan actual.
-        </p>
+        <div class="flex flex-col gap-1.5">
+          <h2 class="text-[19px] font-bold tracking-[-0.02em]">Activar {{ plan.name }}</h2>
+          <p v-if="dueName" class="text-[13.5px] leading-relaxed text-muted">
+            Hoy te tocaba <span class="font-semibold text-ink">{{ dueName }}</span> del plan actual.
+          </p>
+        </div>
       </div>
 
       <div class="flex flex-col gap-2.5 rounded-[18px] border border-accent-line bg-accent-soft p-3.5">

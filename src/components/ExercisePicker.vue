@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import Select from './Select.vue'
 import { useLive } from '../composables/useLive'
+import { useSheetDrag } from '../composables/useSheetDrag'
 import { db } from '../db'
 import type { Exercise, ExerciseFamily } from '../types'
 
@@ -17,6 +18,9 @@ const emit = defineEmits<{
   (event: 'create', name: string): void
   (event: 'close'): void
 }>()
+
+const panel = ref<HTMLElement | null>(null)
+const drag = useSheetDrag(panel, () => emit('close'))
 
 type Entry =
   | { kind: 'exercise'; exercise: Exercise }
@@ -94,23 +98,16 @@ function toggle(familyId: string) {
 
 <template>
   <div class="absolute inset-0 z-20 flex flex-col justify-end bg-black/40" @click.self="emit('close')">
-    <div class="flex max-h-[86%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pt-3 pb-4">
-      <div class="flex shrink-0 justify-center">
-        <span class="h-1 w-9 rounded-sm bg-line-btn" />
-      </div>
+    <div ref="panel" class="flex max-h-[86%] flex-col gap-3 rounded-t-[28px] border-t border-line-btn bg-surface px-4 pb-4">
+      <div class="flex shrink-0 touch-none select-none flex-col gap-3 pt-3" @pointerdown="drag">
+        <div class="flex justify-center">
+          <span class="h-1 w-9 rounded-sm bg-line-btn" />
+        </div>
 
-      <div class="flex shrink-0 items-start gap-3">
-        <div class="flex flex-grow flex-col gap-1">
+        <div class="flex flex-col gap-1">
           <h2 class="text-lg font-bold tracking-[-0.01em]">{{ title }}</h2>
           <p v-if="subtitle" class="text-[12.5px] text-muted">{{ subtitle }}</p>
         </div>
-        <button
-          class="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-muted"
-          type="button"
-          @click="emit('close')"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
       </div>
 
       <label class="flex h-10 shrink-0 items-center gap-3 rounded-2xl border border-line-btn bg-app px-4 text-muted">

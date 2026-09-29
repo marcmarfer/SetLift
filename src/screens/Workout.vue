@@ -64,7 +64,7 @@ async function saveNewExercise(draft: ExerciseDraft) {
   creating.value = null
   if (!owner) return
   const exercise = await createExercise(draft, owner)
-  swapping.value ? swapExercise(exercise.id) : await addExercise(exercise.id)
+  swapping.value ? swapExercise(exercise.id, exercise) : await addExercise(exercise.id)
 }
 
 const sessionId = computed(() => String(route.params.id ?? ''))
@@ -164,27 +164,48 @@ function removeGroup(group: WorkoutGroup) {
   })
 }
 
-function swapExercise(exerciseId: string) {
+function swapExercise(exerciseId: string, picked?: Exercise) {
   const group = swapping.value
   if (!group) return
+  swapping.value = null
 
-  const bodyweight = Boolean(data.value.exercises.find((item) => item.id === exerciseId)?.bodyweight)
+  const exercise = picked ?? data.value.exercises.find((item) => item.id === exerciseId)
+  const current = data.value.exercises.find((item) => item.id === group.exerciseId)
+  const bodyweight = Boolean(exercise?.bodyweight)
 
+  if (bodyweight === Boolean(current?.bodyweight)) {
+    replaceExercise(group, exerciseId)
+    return
+  }
+
+  confirming.value = {
+    title: bodyweight ? 'Pasar a peso corporal' : 'Pasar a ejercicio con peso',
+    message: bodyweight
+      ? `${exercise?.name ?? 'El nuevo ejercicio'} es a peso corporal y ${group.name} se hace con peso, así que los kilos y reps apuntados no valen para él. Sus series se vaciarán, también las que ya hayas marcado.`
+      : `${exercise?.name ?? 'El nuevo ejercicio'} se hace con peso y ${group.name} es a peso corporal, así que los kilos y reps apuntados no valen para él. Sus series se vaciarán, también las que ya hayas marcado.`,
+    label: 'Sustituir y vaciar',
+    tone: 'accent',
+    run: async () => {
+      confirming.value = null
+      replaceExercise(group, exerciseId, bodyweight)
+    },
+  }
+}
+
+function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: boolean) {
   for (const set of group.sets) {
     const target = change(set.id)
     if (!target) continue
-    if (bodyweight !== (target.bodyweightKg != null)) {
-      const fresh = startingWeight(bodyweight, settings.bodyweightKg, undefined, undefined)
-      target.weight = fresh.weight
-      target.bodyweightKg = fresh.bodyweightKg
-    }
     target.exerciseId = exerciseId
+    if (resetTo === undefined) continue
+    const fresh = startingWeight(resetTo, settings.bodyweightKg, undefined, undefined)
+    target.weight = fresh.weight
+    target.bodyweightKg = fresh.bodyweightKg
     target.reps = null
     target.done = false
     target.doneAt = null
   }
 
-  swapping.value = null
   openExerciseId.value = exerciseId
   save()
 }
@@ -641,7 +662,7 @@ async function removeSheet() {
 
 <template>
   <div v-if="data.session" class="relative flex h-full flex-col overflow-hidden">
-    <header class="flex items-center gap-2 border-b border-line px-4 py-2.5">
+    <header class="flex items-center gap-2 border-b border-line px-4 py-2.5" @click="editing = null">
       <button class="-ml-2.5 flex h-11 w-9 shrink-0 items-center justify-center text-muted" type="button" @click="router.back()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
       </button>
@@ -730,7 +751,7 @@ async function removeSheet() {
       >Resumen</RouterLink>
     </header>
 
-    <div class="flex flex-grow flex-col gap-2 overflow-y-auto px-4 py-2.5">
+    <div class="flex flex-grow flex-col gap-2 overflow-y-auto px-4 py-2.5" @click="editing = null">
       <template v-for="group in groups" :key="group.exerciseId">
         <section class="flex flex-col rounded-[20px] border border-line bg-surface shadow-card">
           <button
@@ -863,7 +884,7 @@ async function removeSheet() {
                   ? 'border-accent bg-surface'
                   : 'border-inherit bg-surface'"
                 :type="readonly ? null : 'button'"
-                @click="!readonly && edit(set, 'weight')"
+                @click.stop="!readonly && edit(set, 'weight')"
               >
                 <span class="text-[17px] font-semibold leading-tight">
                   {{ set.weight == null ? '—' : format(set.weight) }}
@@ -882,7 +903,7 @@ async function removeSheet() {
                     ? 'border-transparent bg-transparent'
                     : 'border-line-btn bg-app'"
                 :type="readonly ? null : 'button'"
-                @click="!readonly && edit(set, 'reps')"
+                @click.stop="!readonly && edit(set, 'reps')"
               >
                 <span
                   class="max-w-full truncate px-1.5 font-semibold"
@@ -901,7 +922,7 @@ async function removeSheet() {
                 :is="readonly ? 'span' : 'button'"
                 class="flex h-14 w-14 items-center justify-center"
                 :type="readonly ? null : 'button'"
-                @click="!readonly && toggle(set, group)"
+                @click.stop="!readonly && toggle(set, group)"
               >
                 <span
                   class="flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
@@ -1013,7 +1034,7 @@ async function removeSheet() {
       :exercises="data.exercises"
       :suggested-ids="swapAlternatives"
       @create="openCreate"
-      @pick="swapExercise"
+      @pick="swapExercise($event)"
       @close="swapping = null"
     />
 
@@ -1056,10 +1077,6 @@ async function removeSheet() {
         >Descartar</button>
       </div>
     </template>
-  </div>
-
-  <div v-else class="flex h-full items-center justify-center px-8 text-center">
-    <p class="text-sm text-dim">Esta hoja ya no existe. <button class="text-accent" type="button" @click="router.push('/')">Volver a Hoy</button></p>
 
     <ExerciseSheet
       v-if="creating !== null"
@@ -1069,5 +1086,9 @@ async function removeSheet() {
       @save="saveNewExercise"
       @close="creating = null"
     />
+  </div>
+
+  <div v-else class="flex h-full items-center justify-center px-8 text-center">
+    <p class="text-sm text-dim">Esta hoja ya no existe. <button class="text-accent" type="button" @click="router.push('/')">Volver a Hoy</button></p>
   </div>
 </template>
