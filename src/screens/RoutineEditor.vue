@@ -36,7 +36,8 @@ async function saveNewExercise(draft: ExerciseDraft) {
   creating.value = null
   if (!owner) return
   const exercise = await createExercise(draft, owner)
-  await addExercise(exercise.id)
+  if (swapIndex.value !== null) await swapExercise(exercise.id, exercise)
+  else await addExercise(exercise.id)
 }
 
 const DEFAULT_REST_SEC = 90
@@ -196,6 +197,51 @@ function removeExercise(index: number) {
 }
 
 const confirmingRemoval = ref<string | null>(null)
+const swapIndex = ref<number | null>(null)
+const confirmingSwap = ref<{ title: string; message: string; run: () => Promise<void> } | null>(null)
+
+const swapAlternatives = computed(() => {
+  const item = swapIndex.value === null ? undefined : items.value[swapIndex.value]
+  if (!item) return []
+  const current = data.value.exercises.find((exercise) => exercise.id === item.exerciseId)
+  return data.value.exercises
+    .filter((exercise) => exercise.group === current?.group && exercise.id !== item.exerciseId)
+    .map((exercise) => exercise.id)
+})
+
+const withoutWeights = (sets: SetTemplate[]) => sets.map((set) => ({ ...set, weight: 0 }))
+
+async function swapExercise(exerciseId: string, picked?: Exercise) {
+  const index = swapIndex.value
+  const item = index === null ? undefined : items.value[index]
+  swapIndex.value = null
+  if (index === null || !item || exerciseId === item.exerciseId) return
+
+  const exercise = picked ?? data.value.exercises.find((candidate) => candidate.id === exerciseId)
+  const bodyweight = Boolean(exercise?.bodyweight)
+
+  if (bodyweight === isBodyweight(item.exerciseId)) {
+    await replace(index, { exerciseId })
+    return
+  }
+
+  const current = nameOf(item.exerciseId)
+  const next = exercise?.name ?? 'El nuevo ejercicio'
+  confirmingSwap.value = {
+    title: bodyweight ? 'Pasar a peso corporal' : 'Pasar a ejercicio con peso',
+    message: bodyweight
+      ? `${next} es a peso corporal y ${current} se hace con peso, así que los kilos apuntados no valen para él. Los pesos de sus series se pondrán a 0, también los de las preparadas.`
+      : `${next} se hace con peso y ${current} es a peso corporal, así que la carga apuntada no vale para él. Los pesos de sus series se pondrán a 0, también los de las preparadas.`,
+    run: async () => {
+      confirmingSwap.value = null
+      await replace(index, {
+        exerciseId,
+        sets: withoutWeights(item.sets),
+        ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: withoutWeights(plan.sets) })) } : {}),
+      })
+    },
+  }
+}
 
 async function askRemoveRoutine() {
   const routine = data.value.routine
@@ -490,6 +536,9 @@ function restLabel(item: RoutineExercise) {
                 >
                   <h2 class="text-[15px] font-bold">{{ nameOf(item.exerciseId) }}</h2>
                 </button>
+                <button v-if="!plannedId" class="flex h-10 w-10 items-center justify-center rounded-xl text-muted" type="button" aria-label="Sustituir ejercicio" @click="swapIndex = Number(index)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
+                </button>
                 <button v-if="!plannedId" class="flex h-9 w-9 items-center justify-center rounded-xl border border-line-btn text-danger" type="button" @click="removeExercise(index)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" /></svg>
                 </button>
@@ -777,6 +826,17 @@ function restLabel(item: RoutineExercise) {
     />
 
     <ExercisePicker
+      v-else-if="swapIndex !== null"
+      title="Sustituir ejercicio"
+      subtitle="Se cambia en la rutina y se conservan las series"
+      :exercises="data.exercises"
+      :suggested-ids="swapAlternatives"
+      @create="openCreate"
+      @pick="swapExercise($event)"
+      @close="swapIndex = null"
+    />
+
+    <ExercisePicker
       v-else-if="picking"
       title="Añadir ejercicio"
       subtitle="Se añade al final de la rutina"
@@ -793,6 +853,16 @@ function restLabel(item: RoutineExercise) {
       :draft="{ name: creating, group: '', bodyweight: false }"
       @save="saveNewExercise"
       @close="creating = null"
+    />
+
+    <ConfirmDialog
+      v-if="confirmingSwap"
+      :title="confirmingSwap.title"
+      :message="confirmingSwap.message"
+      label="Sustituir y poner a 0"
+      tone="accent"
+      @confirm="confirmingSwap.run()"
+      @close="confirmingSwap = null"
     />
 
     <ConfirmDialog

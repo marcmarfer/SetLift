@@ -276,7 +276,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
       >
         <p class="text-[15px] font-semibold">¿Actualizar la rutina con estos cambios?</p>
         <p class="num text-xs text-accent-ink">
-          {{ weightChanges.map((change) => `${change.name} ${format(change.from)} → ${format(change.to)} kg`).join(' · ') }}
+          {{ weightChanges.map((change) => `${change.name} ${change.from === 0 ? 'sin peso' : format(change.from)} → ${format(change.to)} kg`).join(' · ') }}
         </p>
         <div class="flex gap-2">
           <button

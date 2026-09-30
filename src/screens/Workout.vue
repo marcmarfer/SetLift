@@ -42,7 +42,7 @@ interface WorkoutGroup {
   record: number
 }
 
-withDefaults(defineProps<{ readonly?: boolean }>(), { readonly: false })
+const props = withDefaults(defineProps<{ readonly?: boolean }>(), { readonly: false })
 
 const route = useRoute()
 const router = useRouter()
@@ -119,7 +119,9 @@ async function confirm() {
     if (stamped.some((set) => set.done)) await spendUpcoming(session, stamped)
   }
 
+  const finished = stamped.length > 0 && stamped.every((set) => set.done)
   discard()
+  if (finished && !props.readonly) router.push({ name: 'summary', params: { id: sessionId.value } })
 }
 
 watch(
