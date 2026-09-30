@@ -99,6 +99,7 @@ async function confirm() {
   const pending = draft.value
   if (!pending) return
 
+  const wasComplete = data.value.sets.length > 0 && data.value.sets.every((set) => set.done)
   const kept = new Set(pending.map((set) => set.id))
   const removed = data.value.sets.filter((set) => !kept.has(set.id)).map((set) => set.id)
   const stamped = pending.map((set) => ({ ...set, updatedAt: Date.now() }))
@@ -119,7 +120,7 @@ async function confirm() {
     if (stamped.some((set) => set.done)) await spendUpcoming(session, stamped)
   }
 
-  const finished = stamped.length > 0 && stamped.every((set) => set.done)
+  const finished = !wasComplete && stamped.length > 0 && stamped.every((set) => set.done)
   discard()
   if (finished && !props.readonly) router.push({ name: 'summary', params: { id: sessionId.value } })
 }
@@ -362,8 +363,7 @@ const groups = computed(() => {
 })
 
 const currentGroup = computed(() => {
-  const pending = groups.value.find((group) => group.done < group.total)
-  return pending ?? groups.value[groups.value.length - 1] ?? null
+  return groups.value.find((group) => group.done < group.total) ?? null
 })
 
 const openId = computed(() => openExerciseId.value ?? currentGroup.value?.exerciseId ?? null)
