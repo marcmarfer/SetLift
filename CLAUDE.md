@@ -86,6 +86,10 @@ The palette lives once in `src/style.css` as CSS custom properties mapped to Tai
 (`bg-app`, `text-muted`, `bg-accent`, `bg-hero`…). Orange is the only accent; green means "done";
 grey means "below target"; black cards carry whatever matters most on the screen.
 
+The first-run tour (`Tour*.vue`, shown from `Welcome.vue` and replayed at `/tour`) draws static copies
+of real screens (Today, Routines, RoutineEditor, Workout, Summary, ProgressDetail); update them when
+those screens change.
+
 ## Rules
 
 @.claude/rules/comentarios-codigo.md

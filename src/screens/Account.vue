@@ -189,6 +189,17 @@ async function importBackup(event: Event) {
         <p v-if="importing" class="px-1 text-xs text-accent">{{ importing }}</p>
       </section>
 
+      <section class="flex flex-col gap-2">
+        <span class="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Ayuda</span>
+        <div class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 shadow-card">
+          <RouterLink to="/tour" class="flex h-14 items-center gap-2.5">
+            <span class="flex-grow text-[14.5px]">Cómo funciona SetLift</span>
+            <span class="num text-xs text-faint">5 pasos</span>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
+          </RouterLink>
+        </div>
+      </section>
+
       <button
         class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5 text-danger"
         type="button"

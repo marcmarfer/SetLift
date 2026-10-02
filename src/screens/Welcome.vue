@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { initialsOf, useSettingsStore } from '../stores/settings'
 import AvatarPicker from '../components/AvatarPicker.vue'
+import TourCarousel from '../components/TourCarousel.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -13,15 +14,22 @@ const name = ref(settings.name || auth.displayName || '')
 const avatar = ref(settings.avatar || auth.photoUrl || '')
 const bodyweight = ref(String(settings.bodyweightKg).replace('.', ','))
 
+const step = ref<'profile' | 'tour'>('profile')
+
 const initials = computed(() => initialsOf(name.value))
 
-function start() {
+function saveProfile() {
   if (name.value.trim()) settings.name = name.value.trim()
   settings.avatar = avatar.value
   const weight = Number(bodyweight.value.replace(',', '.'))
   if (Number.isFinite(weight) && weight > 0) settings.bodyweightKg = weight
+  step.value = 'tour'
+}
+
+async function finish(next: 'plans' | 'today') {
   settings.onboarded = true
-  router.replace({ name: 'today' })
+  await router.replace({ name: 'today' })
+  if (next === 'plans') await router.push({ name: 'plans' })
 }
 
 async function useAnotherAccount() {
@@ -30,10 +38,11 @@ async function useAnotherAccount() {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-hidden">
+  <TourCarousel v-if="step === 'tour'" @finish="finish" />
+  <div v-else class="flex h-full flex-col overflow-hidden">
     <div class="flex flex-col gap-2 px-5 pt-10">
       <h1 class="text-[30px] font-bold leading-tight tracking-[-0.025em]">Configura tu perfil</h1>
-      <p class="text-sm leading-relaxed text-muted">Solo esto y a entrenar.</p>
+      <p class="text-sm leading-relaxed text-muted">Solo esto y un repaso rápido de cómo funciona.</p>
     </div>
 
     <div class="flex flex-grow flex-col justify-center gap-3.5 overflow-y-auto px-5 py-6">
@@ -71,8 +80,8 @@ async function useAnotherAccount() {
       <button
         class="flex h-14 w-full items-center justify-center rounded-2xl bg-accent text-base font-bold text-hero-ink"
         type="button"
-        @click="start"
-      >Empezar</button>
+        @click="saveProfile"
+      >Continuar</button>
 
       <button class="flex h-13 items-center justify-center text-sm text-muted" type="button" @click="useAnotherAccount">
         Entrar con otra cuenta
