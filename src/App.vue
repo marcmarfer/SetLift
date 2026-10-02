@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TabBar from './components/TabBar.vue'
 import UndoBar from './components/UndoBar.vue'
+import InstallBanner from './components/InstallBanner.vue'
 import { TAB_PATHS } from './router'
 import { useAuthStore } from './stores/auth'
 import { useTabSwipe } from './composables/useTabSwipe'
@@ -36,6 +37,7 @@ useTabSwipe(area, pager, TAB_PATHS, router, () => showTabs.value)
         <RouterView />
       </div>
     </main>
+    <InstallBanner v-if="showTabs" />
     <UndoBar />
     <TabBar v-if="showTabs" />
   </div>
