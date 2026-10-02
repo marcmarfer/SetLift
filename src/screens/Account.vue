@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
+import { useInstallPrompt } from '../composables/useInstallPrompt'
 import { longDay } from '../lib/dates'
 import { deleteAllTraining } from '../lib/localData'
 import { useAuthStore } from '../stores/auth'
@@ -17,6 +18,8 @@ const settings = useSettingsStore()
 const importing = ref<string | null>(null)
 const wiping = ref(false)
 const stranded = ref(false)
+const showingSteps = ref(false)
+const { mode: installMode, install } = useInstallPrompt()
 
 async function leave(discardPending = false) {
   if (await auth.signOut(discardPending)) {
@@ -197,6 +200,18 @@ async function importBackup(event: Event) {
             <span class="num text-xs text-faint">5 pasos</span>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
           </RouterLink>
+          <button
+            v-if="installMode"
+            class="flex h-14 items-center gap-2.5 border-t border-line"
+            type="button"
+            @click="installMode === 'native' ? install() : (showingSteps = !showingSteps)"
+          >
+            <span class="flex-grow text-left text-[14.5px]">Añadir a la pantalla de inicio</span>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <p v-if="installMode === 'ios' && showingSteps" class="pb-3.5 text-[12.5px] leading-relaxed text-muted">
+            En Safari, toca <span class="font-semibold text-ink">Compartir</span> y luego <span class="font-semibold text-ink">Añadir a pantalla de inicio</span>.
+          </p>
         </div>
       </section>
 

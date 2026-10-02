@@ -7,6 +7,7 @@ import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
 import { expireWeeklyLaterSessions, parkDeferredFromToday } from './lib/session'
 import { sync } from './lib/sync'
+import './composables/useInstallPrompt'
 import './style.css'
 
 expireWeeklyLaterSessions()

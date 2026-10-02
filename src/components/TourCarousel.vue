@@ -2,17 +2,18 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
+import { useInstallPrompt } from '../composables/useInstallPrompt'
 import BrandMark from './BrandMark.vue'
 import TourPlan from './TourPlan.vue'
 import TourRoutine from './TourRoutine.vue'
 import TourSheet from './TourSheet.vue'
 import TourSets from './TourSets.vue'
 import TourProgress from './TourProgress.vue'
+import TourInstall from './TourInstall.vue'
 
 const props = withDefaults(defineProps<{ replay?: boolean }>(), { replay: false })
 const emit = defineEmits<{ finish: [next: 'plans' | 'today'] }>()
 
-const steps = [TourPlan, TourRoutine, TourSheet, TourSets, TourProgress]
 const ENTER_MS = 220
 const SETTLE_MS = 700
 const EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
@@ -24,14 +25,32 @@ const back = ref<HTMLButtonElement | null>(null)
 const skip = ref<HTMLButtonElement | null>(null)
 const index = ref(0)
 const announcement = ref('')
+const offerInstall = ref(false)
+
+const { mode, install } = useInstallPrompt()
+
+watch(mode, (value) => {
+  if (value && !props.replay) offerInstall.value = true
+}, { immediate: true })
+
+const steps = computed(() => [
+  TourPlan,
+  TourRoutine,
+  TourSheet,
+  TourSets,
+  TourProgress,
+  ...(offerInstall.value ? [TourInstall] : []),
+])
 
 let settleTimer: ReturnType<typeof setTimeout> | undefined
 let settling = false
 
-const last = computed(() => index.value === steps.length - 1)
+const last = computed(() => index.value === steps.value.length - 1)
+const installing = computed(() => steps.value[index.value] === TourInstall)
 const hasPlan = useLive(async () => (await db.plans.count()) > 0, false)
+const destination = computed(() => (props.replay || hasPlan.value ? 'today' : 'plans'))
 const showBack = computed(() => index.value > 0)
-const showSkip = computed(() => props.replay || !last.value || !hasPlan.value)
+const showSkip = computed(() => props.replay || !last.value || !hasPlan.value || installing.value)
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -49,7 +68,7 @@ function settle() {
 function go(target: number) {
   const element = track.value
   if (!element || settling) return
-  const position = Math.min(Math.max(target, 0), steps.length - 1)
+  const position = Math.min(Math.max(target, 0), steps.value.length - 1)
   if (position === index.value) return
   settling = true
   clearTimeout(settleTimer)
@@ -57,13 +76,18 @@ function go(target: number) {
   element.scrollTo({ left: position * element.clientWidth, behavior: reducedMotion() ? 'auto' : 'smooth' })
 }
 
-function next() {
+async function next() {
   if (settling) return
   if (!last.value) {
     go(index.value + 1)
     return
   }
-  emit('finish', props.replay || hasPlan.value ? 'today' : 'plans')
+  if (installing.value && mode.value === 'native') await install()
+  emit('finish', destination.value)
+}
+
+function skipAhead() {
+  emit('finish', installing.value ? destination.value : 'today')
 }
 
 function onKey(event: KeyboardEvent) {
@@ -161,7 +185,7 @@ onBeforeUnmount(() => {
           ref="skip"
           class="pointer-events-auto -mr-2 flex h-11 items-center px-2 text-sm font-medium text-muted"
           type="button"
-          @click="emit('finish', 'today')"
+          @click="skipAhead"
         >{{ replay ? 'Cerrar' : last ? 'Ahora no' : 'Saltar' }}</button>
       </div>
     </div>
@@ -186,6 +210,8 @@ onBeforeUnmount(() => {
         @click="next"
       >
         <template v-if="!last">Siguiente</template>
+        <template v-else-if="installing && mode === 'native'">Instalar</template>
+        <template v-else-if="installing">Continuar</template>
         <template v-else-if="replay">Listo</template>
         <template v-else-if="hasPlan">Empezar</template>
         <template v-else>Crear mi plan</template>

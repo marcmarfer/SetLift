@@ -5,11 +5,8 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-const DISMISSED_KEY = 'setlift.installDismissed'
-
 const deferred = ref<BeforeInstallPromptEvent | null>(null)
 const installed = ref(isStandalone())
-const dismissed = ref(readDismissed())
 
 const isIos =
   /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -32,36 +29,20 @@ function isStandalone() {
   )
 }
 
-function readDismissed() {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
 export function useInstallPrompt() {
   const mode = computed<'native' | 'ios' | null>(() => {
-    if (installed.value || dismissed.value) return null
+    if (installed.value) return null
     if (deferred.value) return 'native'
     return isIos ? 'ios' : null
   })
-
-  function dismiss() {
-    dismissed.value = true
-    try {
-      localStorage.setItem(DISMISSED_KEY, '1')
-    } catch {}
-  }
 
   async function install() {
     const event = deferred.value
     if (!event) return
     deferred.value = null
     await event.prompt()
-    const { outcome } = await event.userChoice
-    if (outcome === 'dismissed') dismiss()
+    await event.userChoice
   }
 
-  return { mode, install, dismiss }
+  return { mode, install }
 }
