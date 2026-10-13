@@ -121,6 +121,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+@layer base {
+  * {
+    touch-action: manipulation;
+  }
+}
+
 @media (pointer: coarse) {
   input:not([type='file']),
   textarea,
