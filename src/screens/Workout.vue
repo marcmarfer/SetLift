@@ -13,6 +13,7 @@ import { startingWeight, weightLabel } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { blueprintOf, spendUpcoming } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
+import TechniqueSheet from '../components/TechniqueSheet.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -71,6 +72,7 @@ const sessionId = computed(() => String(route.params.id ?? ''))
 const openExerciseId = ref<string | null>(null)
 const editing = ref<{ setId: string; field: 'weight' | 'reps' } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
+const techniqueFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
 const draft = ref<SetEntry[] | null>(null)
 
@@ -494,6 +496,18 @@ function lastTechnique(group: WorkoutGroup) {
   return sameTechnique(before, group.technique) ? undefined : before
 }
 
+function applyTechnique(technique: string | null) {
+  const group = techniqueFor.value
+  techniqueFor.value = null
+  if (!group || sameTechnique(technique, group.technique)) return
+
+  for (const set of group.sets) {
+    const target = change(set.id)
+    if (target) target.technique = technique
+  }
+  save()
+}
+
 function applySuggestion(set: SetEntry, weight: number, group: { sets: SetEntry[] }) {
   for (const candidate of group.sets) {
     if (candidate.index <= set.index) continue
@@ -830,10 +844,27 @@ async function removeSheet() {
           <Collapse :open="group.exerciseId === openId" :panel-id="`panel-${group.exerciseId}`">
             <div class="flex flex-col gap-2.5 px-3 pb-3 pt-2.5">
               <div
-                v-if="group.technique || lastTechnique(group) !== undefined"
+                v-if="!readonly || group.technique || lastTechnique(group) !== undefined"
                 class="flex flex-wrap items-center gap-2 px-0.5"
               >
-                <TechniqueTag v-if="group.technique" :technique="group.technique" chip />
+                <button
+                  v-if="!readonly && group.technique"
+                  type="button"
+                  aria-label="Cambiar la técnica en esta hoja"
+                  @click.stop="techniqueFor = group"
+                >
+                  <TechniqueTag :technique="group.technique" chip />
+                </button>
+                <TechniqueTag v-else-if="group.technique" :technique="group.technique" chip />
+                <button
+                  v-else-if="!readonly"
+                  class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  type="button"
+                  @click.stop="techniqueFor = group"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Técnica
+                </button>
                 <span v-if="lastTechnique(group) !== undefined" class="text-[12px] text-muted">
                   La última vez: <span class="font-semibold text-ink">{{ lastTechnique(group) ?? 'normal' }}</span>
                 </span>
@@ -1079,6 +1110,15 @@ async function removeSheet() {
         >Descartar</button>
       </div>
     </template>
+
+    <TechniqueSheet
+      v-if="techniqueFor"
+      :value="techniqueFor.technique"
+      :exercise-name="techniqueFor.name"
+      subtitle="Solo para esta hoja: la rutina no cambia"
+      @apply="applyTechnique"
+      @close="techniqueFor = null"
+    />
 
     <ExerciseSheet
       v-if="creating !== null"
