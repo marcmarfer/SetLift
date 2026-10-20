@@ -9,7 +9,11 @@ const props = defineProps<{
   hint: number | null
   label?: string
   action?: string
+  stepKg?: number
 }>()
+
+const stepSize = computed(() => props.stepKg ?? 2.5)
+const stepLabel = computed(() => String(stepSize.value).replace('.', ','))
 
 const emit = defineEmits<{
   (event: 'commit', value: number | null): void
@@ -95,12 +99,12 @@ function pick(reps: number) {
     </div>
 
     <div v-else class="flex items-center gap-2">
-      <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(-2.5)">−2,5</button>
+      <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(-stepSize)">−{{ stepLabel }}</button>
       <div class="num flex h-14 flex-grow items-center justify-center gap-1 rounded-2xl border border-line-btn bg-app">
         <span class="text-[22px] font-bold">{{ draft || '—' }}</span>
         <span class="text-[13px] text-dim">kg</span>
       </div>
-      <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(2.5)">+2,5</button>
+      <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(stepSize)">+{{ stepLabel }}</button>
     </div>
 
     <div class="grid grid-cols-3 gap-2">

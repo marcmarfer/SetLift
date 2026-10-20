@@ -1202,6 +1202,7 @@ async function removeSheet() {
       :hint="null"
       label="Tu peso hoy"
       action="Aplicar"
+      :step-kg="0.5"
       @next="applyBodyweight"
       @close="bodyweightFor = null"
     />
