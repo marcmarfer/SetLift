@@ -538,6 +538,11 @@ function targetSummary(group: WorkoutGroup) {
   return labels.size === 1 ? [...labels][0] : 'Varios objetivos'
 }
 
+const bodyweightIsCurrent = computed(() => {
+  const date = data.value.session?.date
+  return Boolean(date) && date! >= today()
+})
+
 function bodyweightOf(group: WorkoutGroup) {
   return group.sets.find((set) => set.bodyweightKg != null)?.bodyweightKg ?? null
 }
@@ -553,7 +558,7 @@ function applyBodyweight(value: number | null) {
     set.bodyweightKg = value
   }
 
-  settings.bodyweightKg = value
+  if (bodyweightIsCurrent.value) settings.bodyweightKg = value
   save()
 }
 
@@ -1200,7 +1205,7 @@ async function removeSheet() {
       :value="bodyweightOf(bodyweightFor)"
       :context="`${bodyweightFor.name} · se aplica a toda la hoja`"
       :hint="null"
-      label="Tu peso hoy"
+      :label="bodyweightIsCurrent ? 'Tu peso actual' : 'Tu peso ese día'"
       action="Aplicar"
       :step-kg="0.5"
       @next="applyBodyweight"
