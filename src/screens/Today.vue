@@ -57,7 +57,7 @@ const data = useLive<TodayData>(
 
     const due = plan ? dueRoutine(plan, sessions, progress) : null
     const previous = sessions
-      .filter((session) => session.routineId === due && !session.skipped)
+      .filter((session) => session.routineId === due && hasTraining(session, progress))
       .sort((a, b) => (a.date < b.date ? 1 : -1))
     const lastSession = previous[0] ?? null
     const lastSets = lastSession
@@ -822,13 +822,13 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
 
       <section v-else-if="routine" class="flex flex-col gap-4 rounded-[30px] bg-hero p-5 shadow-hero">
         <div class="flex items-start gap-3">
-          <div class="flex flex-grow flex-col gap-2">
+          <div class="flex min-w-0 flex-grow flex-col gap-2">
             <span class="text-[11px] font-bold uppercase tracking-[0.1em] text-accent">Toca hoy</span>
             <span class="text-4xl font-bold leading-none tracking-[-0.03em] text-hero-ink">{{ dueTitle }}</span>
           </div>
-          <div v-if="lastSummary" class="flex flex-col items-end gap-1.5">
+          <div v-if="lastSummary" class="flex shrink-0 flex-col items-end gap-1.5">
             <span class="num text-[13px] text-hero-muted">{{ lastSummary.when }}</span>
-            <span class="num flex h-6.5 items-center rounded-full bg-hero-surface px-2.5 text-[11.5px] text-hero-ink">
+            <span class="num flex h-6.5 items-center whitespace-nowrap rounded-full bg-hero-surface px-2.5 text-[11.5px] text-hero-ink">
               {{ lastSummary.sets }} series · {{ thousands(lastSummary.volume) }} kg
             </span>
           </div>
