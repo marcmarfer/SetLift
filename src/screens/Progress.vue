@@ -75,10 +75,16 @@ function score(trend: ExerciseTrend) {
   return trend.previous.reps > 0 ? ((trend.best.reps - trend.previous.reps) / trend.previous.reps) * 100 : 0
 }
 
+const search = ref('')
+
+const folded = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+
 const visibleTrends = computed(() => {
   const cutoff = addDays(today(), -ACTIVE_DAYS)
+  const term = folded(search.value.trim())
 
   const list = exerciseTrends.value.filter((trend) => {
+    if (term && !folded(trend.exercise.name).includes(term)) return false
     if (groupFilter.value && trend.exercise.group !== groupFilter.value) return false
     if (activeOnly.value && trend.best.date < cutoff) return false
     if (trendFilter.value === 'up') return trend.change > 0
@@ -158,11 +164,25 @@ const targetBand = {
             <span v-if="activeFilters" class="num">{{ activeFilters }}</span>
           </button>
         </div>
+        <label
+          v-if="exerciseTrends.length"
+          class="mb-3 flex h-9 shrink-0 items-center gap-2.5 rounded-xl border border-line-btn bg-app px-3 text-muted"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <input
+            v-model="search"
+            class="h-full min-w-0 flex-grow bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            placeholder="Buscar ejercicio"
+            type="search"
+          />
+        </label>
         <TrendRow v-for="trend in visibleTrends" :key="trend.exercise.id" :trend="trend" />
         <p v-if="visibleTrends.length === 0" class="py-8 text-center text-sm text-dim">
           {{ exerciseTrends.length === 0
             ? 'Marca alguna serie y aquí verás la tendencia.'
-            : 'Ningún ejercicio cumple el filtro.' }}
+            : search.trim()
+              ? `Ningún ejercicio coincide con «${search.trim()}».`
+              : 'Ningún ejercicio cumple el filtro.' }}
         </p>
       </section>
 
