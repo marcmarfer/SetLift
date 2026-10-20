@@ -24,7 +24,14 @@ function toggle() {
     </template>
     <template #mockup>
       <div class="flex flex-col rounded-[20px] border border-line bg-surface shadow-card">
-        <div class="flex items-start gap-1 px-3 pt-3">
+        <div class="flex items-start gap-1 pl-1.5 pr-3 pt-3">
+          <span class="flex h-10 w-7 shrink-0 items-center justify-center text-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+              <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+              <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+            </svg>
+          </span>
           <div class="flex flex-grow flex-col gap-1.5 pt-1">
             <span class="text-[17px] font-bold leading-tight tracking-[-0.01em]">Remo con barra</span>
             <span class="num text-[13px] text-dim">{{ done ? 1 : 0 }}/3</span>

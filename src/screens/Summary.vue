@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
-import { sheetName } from '../lib/session'
+import { sheetName, sheetOrder } from '../lib/session'
 import { longDay } from '../lib/dates'
 import { estimateOneRepMax, progression } from '../lib/progress'
 import { bySession } from '../lib/upcoming'
@@ -37,7 +37,7 @@ const data = useLive<SummaryData>(
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
     const exercises = await db.exercises.toArray()
     const sheet = await db.sets.where('sessionId').equals(session.id).toArray()
-    const sets = sheet.filter((set) => set.done)
+    const sets = sheet.filter((set) => set.done).sort((a, b) => sheetOrder(a) - sheetOrder(b))
 
     const ids = [...new Set(sets.map((set) => set.exerciseId))]
     const previous: Record<string, SetEntry[]> = {}

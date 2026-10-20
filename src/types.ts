@@ -119,6 +119,7 @@ export interface SetEntry {
   sessionId: string
   exerciseId: string
   slot?: number
+  position?: number
   index: number
   type: SetType
   targetReps?: number

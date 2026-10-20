@@ -732,7 +732,7 @@ function restLabel(item: RoutineExercise) {
                   </div>
                 </div>
 
-                <div v-if="bySession(item)" class="flex flex-col gap-2 border-t border-line pt-3">
+                <div v-if="bySession(item)" class="mt-3 flex flex-col gap-2 border-t border-line pt-3">
                   <div class="flex flex-col gap-0.5">
                     <span class="text-[13px] text-muted">Próximas sesiones</span>
                     <span v-if="plansOf(item).length === 0" class="text-[11.5px] font-medium text-warn">

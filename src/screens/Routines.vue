@@ -44,7 +44,15 @@ const activePlan = computed(() => data.value.plans.find((plan) => plan.active) ?
 const planRoutines = computed(() => {
   const plan = activePlan.value
   if (!plan) return []
-  const due = dueRoutine(plan, data.value.sessions, data.value.progress)
+  const trainedToday = data.value.sessions
+    .filter((session) =>
+      session.date === today() &&
+      !session.skipped &&
+      session.routineId &&
+      plan.routineIds.includes(session.routineId) &&
+      (data.value.progress[session.id]?.done ?? 0) > 0)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0]?.routineId ?? null
+  const due = trainedToday ?? dueRoutine(plan, data.value.sessions, data.value.progress)
 
   return plan.routineIds.flatMap((id) => {
     const routine = data.value.routines.find((candidate) => candidate.id === id)
@@ -61,6 +69,7 @@ const planRoutines = computed(() => {
       prepared: preparedCount(routine, data.value.sessions),
       lastDate: previous[0]?.date ?? null,
       due: id === due,
+      trainedToday: id === trainedToday,
     }]
   })
 })
@@ -72,6 +81,7 @@ const rows = ref<Array<{
   prepared: number
   lastDate: string | null
   due: boolean
+  trainedToday: boolean
 }>>([])
 
 watch(planRoutines, (list) => { rows.value = [...list] }, { immediate: true })
@@ -193,7 +203,7 @@ async function setMode(mode: PlanMode) {
               <span class="text-base" :class="item.due ? 'font-bold' : 'font-semibold'">{{ item.name }}</span>
               <span class="num text-xs" :class="item.due ? 'text-accent-ink' : 'text-sub'">
                 {{ item.exercises }} ejercicios<template v-if="item.prepared"> · {{ item.prepared }} {{ item.prepared === 1 ? 'preparada' : 'preparadas' }}</template>
-                · {{ item.due ? 'toca ahora' : item.lastDate ? timeAgo(item.lastDate) : 'sin registros' }}
+                · {{ item.trainedToday ? 'hoy' : item.due ? 'toca ahora' : item.lastDate ? timeAgo(item.lastDate) : 'sin registros' }}
               </span>
             </div>
             <span class="text-icon">

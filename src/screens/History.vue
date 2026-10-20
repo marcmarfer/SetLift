@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
-import { sheetName } from '../lib/session'
+import { sheetName, sheetOrder } from '../lib/session'
 import { addDays, fromIso, monthName, shortDay, today, toIso } from '../lib/dates'
 import AccountButton from '../components/AccountButton.vue'
 import Select from '../components/Select.vue'
@@ -115,7 +115,7 @@ const sections = computed(() => {
 
   for (const session of sorted) {
     if (!inRange(session.date)) continue
-    const sets = (setsBySession.get(session.id) ?? []).filter((set) => set.done)
+    const sets = (setsBySession.get(session.id) ?? []).filter((set) => set.done).sort((a, b) => sheetOrder(a) - sheetOrder(b))
     if (sets.length === 0) continue
 
     const names: string[] = []

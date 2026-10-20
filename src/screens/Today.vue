@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import draggable from 'vuedraggable'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
@@ -31,6 +31,7 @@ interface TodayData {
   weekSets: SetEntry[]
 }
 
+const route = useRoute()
 const router = useRouter()
 const undo = useUndoStore()
 
@@ -522,11 +523,46 @@ const lastSummary = computed(() => {
 })
 
 const rotation = computed(() => data.value.plan?.mode === 'rotation')
-const back = ref(0)
+const back = computed({
+  get: () => (route.query.back === '1' ? 1 : 0),
+  set: (value: number) => {
+    if (value === back.value) return
+    router.replace({ query: { ...route.query, back: value ? '1' : undefined } })
+  },
+})
+
+const pastPlan = computed<Plan | null>(() => {
+  const current = data.value
+  if (!current.plan) return null
+  const build = rotation.value ? planRotation : planWeek
+  if (build(current.plan, current.routines, current.sessions, current.progress, 1).some((item) => item.sessionId)) return null
+
+  const monday = weekStart()
+  const from = addDays(monday, -7)
+  const lastWeek = current.sessions
+    .filter((session) => session.routineId && !session.skipped && session.date >= from && session.date < monday)
+    .sort((a, b) => (a.date === b.date ? a.updatedAt - b.updatedAt : a.date < b.date ? -1 : 1))
+  if (lastWeek.length === 0) return null
+
+  const known = current.plans.find((plan) => lastWeek.some((session) => session.planId === plan.id))
+  if (known) return known
+
+  return {
+    id: '',
+    name: '',
+    mode: 'weekly',
+    routineIds: [...new Set(lastWeek.map((session) => session.routineId as string))],
+    active: false,
+    updatedAt: 0,
+  }
+})
 
 const week = computed(() => {
   const current = data.value
   if (!current.plan) return []
+  if (back.value && pastPlan.value) {
+    return planWeek(pastPlan.value, current.routines, current.sessions, current.progress, 1)
+  }
   const build = rotation.value ? planRotation : planWeek
   return build(current.plan, current.routines, current.sessions, current.progress, back.value)
 })
@@ -548,16 +584,22 @@ const canMarkLater = computed(() => {
 const hasPrevious = computed(() => {
   const current = data.value
   if (!current.plan) return false
+  if (pastPlan.value) return true
   const build = rotation.value ? planRotation : planWeek
   return build(current.plan, current.routines, current.sessions, current.progress, 1).some((item) => item.sessionId)
 })
 
 const stripTitle = computed(() => {
+  if (back.value && pastPlan.value) return pastPlan.value.name ? `Semana pasada · ${pastPlan.value.name}` : 'Semana pasada'
   if (rotation.value) return back.value ? 'Rotación anterior' : 'Tu rotación'
   return back.value ? 'Semana pasada' : 'Esta semana'
 })
 
 const planned = computed(() => week.value.filter((item) => !item.free))
+const stripColumns = (count: number) => {
+  const columns = count > 4 ? Math.ceil(count / 2) : Math.max(count, 1)
+  return `repeat(${columns}, minmax(0, 1fr))`
+}
 const doneThisWeek = computed(() => planned.value.filter((item) => item.done).length)
 
 const freeWeek = computed(() => {
@@ -856,7 +898,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
             v-if="hasPrevious || back"
             class="-mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-icon"
             type="button"
-            :aria-label="back ? 'Volver a lo actual' : rotation ? 'Ver la rotación anterior' : 'Ver la semana pasada'"
+            :aria-label="back ? 'Volver a lo actual' : rotation && !pastPlan ? 'Ver la rotación anterior' : 'Ver la semana pasada'"
             @click="back = back ? 0 : 1"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -868,8 +910,8 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           v-model="strip"
           item-key="routineId"
           tag="ul"
-          class="grid gap-1.5"
-          :style="{ gridTemplateColumns: `repeat(${Math.max(planned.length, 1)}, minmax(0, 1fr))` }"
+          class="grid auto-rows-fr gap-1.5"
+          :style="{ gridTemplateColumns: stripColumns(planned.length) }"
           :disabled="back !== 0"
           :animation="160"
           handle=".drag-handle"
@@ -954,8 +996,8 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
       <section v-if="freeWeek.length" class="flex flex-col gap-3 rounded-[20px] border border-line bg-surface p-3.5 shadow-card">
         <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Extras</span>
         <ul
-          class="grid gap-1.5"
-          :style="{ gridTemplateColumns: `repeat(${Math.max(planned.length, freeWeek.length, 1)}, minmax(0, 1fr))` }"
+          class="grid auto-rows-fr gap-1.5"
+          :style="{ gridTemplateColumns: stripColumns(Math.max(planned.length, freeWeek.length)) }"
         >
           <RouterLink
             v-for="sheet in freeWeek"

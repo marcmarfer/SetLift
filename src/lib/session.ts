@@ -217,6 +217,8 @@ export async function openFreestyleWorkout(routineId: string, planId: string | n
   return id
 }
 
+export const sheetOrder = (set: Pick<SetEntry, 'position' | 'slot'>) => set.position ?? set.slot ?? 0
+
 export function sheetName(
   session: { routineId: string | null; freestyle?: boolean; name?: string },
   routineName: string | null | undefined,

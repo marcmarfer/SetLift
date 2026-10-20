@@ -19,12 +19,16 @@ const props = defineProps<{
   position: number
   count: number
   exerciseName: string
+  subtitle?: string
+  sets?: SetTemplate[]
 }>()
 
 const emit = defineEmits<{
-  (event: 'apply', changes: Partial<SetTemplate>, all: boolean): void
+  (event: 'apply', changes: Partial<SetTemplate>, all: boolean, position: number): void
   (event: 'close'): void
 }>()
+
+const chosen = ref<number | 'all'>(props.position)
 
 const panel = ref<HTMLElement | null>(null)
 const drag = useSheetDrag(panel, () => emit('close'))
@@ -45,6 +49,27 @@ const customRange = ref(
 const customRir = ref(
   effort.value === 'rir' && !RIR_PRESETS.some(([min, max]) => min === rirMin.value && max === rirMax.value),
 )
+
+function load(template: SetTemplate) {
+  reps.value = repsOf(template)
+  effort.value = effortOf(template)
+  fixedReps.value = template.reps ?? 5
+  repsMin.value = template.repsMin ?? 8
+  repsMax.value = template.repsMax ?? 12
+  rirMin.value = template.rirMin ?? 1
+  rirMax.value = template.rirMax ?? template.rirMin ?? 2
+  rpe.value = template.rpe ?? 8
+  customRange.value =
+    reps.value === 'range' && !RANGE_PRESETS.some(([min, max]) => min === repsMin.value && max === repsMax.value)
+  customRir.value =
+    effort.value === 'rir' && !RIR_PRESETS.some(([min, max]) => min === rirMin.value && max === rirMax.value)
+}
+
+function choose(position: number | 'all') {
+  chosen.value = position
+  const template = position === 'all' ? null : props.sets?.[position]
+  if (template) load(template)
+}
 
 const effortModes = computed(() => EFFORT_MODES.filter((mode) => allowsEffort(reps.value, mode.value)))
 
@@ -120,8 +145,30 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         </div>
 
         <div class="flex flex-col gap-1">
-          <h2 class="text-lg font-bold tracking-[-0.01em]">Objetivo · serie {{ position + 1 }}</h2>
+          <h2 class="text-lg font-bold tracking-[-0.01em]">{{ sets ? 'Objetivo' : `Objetivo · serie ${position + 1}` }}</h2>
           <p class="text-[12.5px] text-muted">{{ exerciseName }} · <span class="num font-semibold text-ink">{{ preview }}</span></p>
+          <p v-if="subtitle" class="text-[12.5px] text-muted">{{ subtitle }}</p>
+        </div>
+      </div>
+
+      <div v-if="sets" class="flex flex-col gap-2">
+        <span class="text-[13px] text-muted">Serie</span>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="(_, spot) in sets"
+            :key="spot"
+            class="num flex h-11 min-w-11 flex-grow items-center justify-center rounded-xl border px-2 text-[13px] font-semibold"
+            :class="chosen === spot ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2'"
+            type="button"
+            @click="choose(spot)"
+          >{{ spot + 1 }}</button>
+          <button
+            v-if="sets.length > 1"
+            class="flex h-11 flex-grow items-center justify-center rounded-xl border px-3 text-[13px] font-semibold"
+            :class="chosen === 'all' ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2'"
+            type="button"
+            @click="choose('all')"
+          >Todas</button>
         </div>
       </div>
 
@@ -259,17 +306,24 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         </template>
       </div>
 
-      <div class="flex shrink-0 gap-2">
+      <button
+        v-if="sets"
+        class="flex h-13 shrink-0 items-center justify-center rounded-2xl bg-accent text-sm font-bold text-hero-ink"
+        type="button"
+        @click="chosen === 'all' ? emit('apply', changes, true, position) : emit('apply', changes, false, chosen)"
+      >{{ chosen === 'all' ? 'Aplicar a todas las series' : `Aplicar a la serie ${chosen + 1}` }}</button>
+
+      <div v-else class="flex shrink-0 gap-2">
         <button
           v-if="count > 1"
           class="flex h-13 flex-grow items-center justify-center rounded-2xl border border-line-btn bg-surface-2 text-sm font-semibold"
           type="button"
-          @click="emit('apply', changes, true)"
+          @click="emit('apply', changes, true, position)"
         >Todas las series</button>
         <button
           class="flex h-13 flex-grow items-center justify-center rounded-2xl bg-accent text-sm font-bold text-hero-ink"
           type="button"
-          @click="emit('apply', changes, false)"
+          @click="emit('apply', changes, false, position)"
         >Solo la serie {{ position + 1 }}</button>
       </div>
     </div>

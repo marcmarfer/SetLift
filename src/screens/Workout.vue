@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import draggable from 'vuedraggable'
 import { useRoute, useRouter } from 'vue-router'
 import { db, newId, plain } from '../db'
 import { useLive } from '../composables/useLive'
@@ -8,12 +9,13 @@ import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
-import { effortLabel, effortOf, minReps, repsLabel, repsOf, targetOf } from '../lib/targets'
+import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, targetOf } from '../lib/targets'
 import { startingWeight, weightLabel } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { blueprintOf, spendUpcoming } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
+import SetTargetSheet from '../components/SetTargetSheet.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -26,10 +28,11 @@ import Collapse from '../components/Collapse.vue'
 import RestBar from '../components/RestBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Calendar from '../components/Calendar.vue'
-import type { Exercise, Routine, RoutineExercise, Session, SetEntry } from '../types'
+import type { Exercise, Routine, RoutineExercise, Session, SetEntry, SetTemplate } from '../types'
 
 interface WorkoutGroup {
   slot: number
+  order: number
   recordIds: Set<string>
   exerciseId: string
   name: string
@@ -73,6 +76,7 @@ const openExerciseId = ref<string | null>(null)
 const editing = ref<{ setId: string; field: 'weight' | 'reps' } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
+const targetFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
 const draft = ref<SetEntry[] | null>(null)
 
@@ -152,7 +156,11 @@ async function addExercise(exerciseId: string) {
     sets.reduce((highest, set) => Math.max(highest, set.slot ?? 0), -1) + 1,
     data.value.blueprint.length,
   )
-  sets.push(...(await exerciseEntries(sessionId.value, exerciseId, slot, data.value.session?.date)))
+  const entries = await exerciseEntries(sessionId.value, exerciseId, slot, data.value.session?.date)
+  const position = sets.some((set) => set.position != null)
+    ? groups.value.reduce((highest, group) => Math.max(highest, group.order), -1) + 1
+    : undefined
+  sets.push(...entries.map((entry) => ({ ...entry, position })))
   openExerciseId.value = exerciseId
   save()
 }
@@ -334,8 +342,10 @@ const groups = computed(() => {
     slots.set(slot, list)
   }
 
+  const orderOf = (slot: number, list: SetEntry[]) => list[0].position ?? slot
+
   return [...slots.entries()]
-    .sort((a, b) => a[0] - b[0])
+    .sort((a, b) => orderOf(...a) - orderOf(...b) || a[0] - b[0])
     .map(([slot, list]) => {
       const sets = [...list].sort((a, b) => a.index - b.index)
       const exerciseId = sets[0].exerciseId
@@ -350,6 +360,7 @@ const groups = computed(() => {
       return {
         recordIds,
         slot,
+        order: orderOf(slot, list),
         exerciseId,
         name: nameOf(exerciseId),
         restSec: template?.restSec ?? null,
@@ -363,6 +374,20 @@ const groups = computed(() => {
       }
     })
 })
+
+const ordered = ref<WorkoutGroup[]>([])
+
+watch(groups, (list) => { ordered.value = [...list] }, { immediate: true })
+
+function reorder() {
+  const sets = draftSets()
+  ordered.value.forEach((group, position) => {
+    for (const set of sets) {
+      if (group.sets.some((entry) => entry.id === set.id)) set.position = position
+    }
+  })
+  save()
+}
 
 const currentGroup = computed(() => {
   return groups.value.find((group) => group.done < group.total) ?? null
@@ -490,12 +515,6 @@ function complete(set: SetEntry, reps: number, group: ToggleGroup) {
   rest.start(group.restSec, `Serie ${next.index} · ${format(next.weight ?? 0)} kg × ${targetLabel(next)}`)
 }
 
-function lastTechnique(group: WorkoutGroup) {
-  if (group.previous.length === 0) return undefined
-  const before = group.previous[0].technique?.trim() || null
-  return sameTechnique(before, group.technique) ? undefined : before
-}
-
 function applyTechnique(technique: string | null) {
   const group = techniqueFor.value
   techniqueFor.value = null
@@ -504,6 +523,28 @@ function applyTechnique(technique: string | null) {
   for (const set of group.sets) {
     const target = change(set.id)
     if (target) target.technique = technique
+  }
+  save()
+}
+
+function templateOf(set: SetEntry): SetTemplate {
+  const target = targetOf(set)
+  return { ...target, effort: effortOf(target) ?? undefined }
+}
+
+function nextPosition(group: WorkoutGroup) {
+  return Math.max(group.sets.findIndex((set) => !set.done), 0)
+}
+
+function applyTarget(changes: Partial<SetTemplate>, all: boolean, position: number) {
+  const group = targetFor.value
+  targetFor.value = null
+  if (!group) return
+
+  for (const [spot, set] of group.sets.entries()) {
+    if (!all && spot !== position) continue
+    const target = change(set.id)
+    if (target) Object.assign(target, entryTarget({ ...templateOf(set), ...changes }))
   }
   save()
 }
@@ -768,16 +809,38 @@ async function removeSheet() {
     </header>
 
     <div class="flex flex-grow flex-col gap-2 overflow-y-auto px-4 py-2.5" @click="editing = null">
-      <template v-for="group in groups" :key="group.exerciseId">
+      <draggable
+        v-model="ordered"
+        item-key="slot"
+        class="flex flex-col gap-2"
+        :disabled="readonly"
+        :animation="160"
+        handle=".drag-handle"
+        @end="reorder"
+      >
+        <template #item="{ element: group }">
         <section class="flex flex-col rounded-[20px] border border-line bg-surface shadow-card">
           <button
             v-if="group.exerciseId !== openId"
-            class="flex h-12 items-center gap-2.5 px-3.5 text-left"
+            class="flex h-12 items-center gap-2.5 text-left"
+            :class="readonly ? 'px-3.5' : 'pl-1.5 pr-3.5'"
             type="button"
             :aria-expanded="false"
             :aria-controls="`panel-${group.exerciseId}`"
             @click="openExerciseId = group.exerciseId"
           >
+            <span
+              v-if="!readonly"
+              class="drag-handle -mr-1 flex h-12 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-icon"
+              aria-label="Arrastrar para reordenar"
+              @click.stop
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+                <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+              </svg>
+            </span>
             <svg
               v-if="group.done === group.total"
               width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="text-ok"
@@ -791,7 +854,18 @@ async function removeSheet() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M6 9l6 6 6-6" /></svg>
           </button>
 
-          <div v-else class="flex items-start gap-1 px-3 pt-3">
+          <div v-else class="flex items-start gap-1 pt-3" :class="readonly ? 'px-3' : 'pl-1.5 pr-3'">
+            <span
+              v-if="!readonly"
+              class="drag-handle flex h-10 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-icon"
+              aria-label="Arrastrar para reordenar"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+                <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+              </svg>
+            </span>
             <button
               class="flex flex-grow flex-col gap-1.5 pt-1 text-left"
               type="button"
@@ -844,7 +918,7 @@ async function removeSheet() {
           <Collapse :open="group.exerciseId === openId" :panel-id="`panel-${group.exerciseId}`">
             <div class="flex flex-col gap-2.5 px-3 pb-3 pt-2.5">
               <div
-                v-if="!readonly || group.technique || lastTechnique(group) !== undefined"
+                v-if="!readonly || group.technique"
                 class="flex flex-wrap items-center gap-2 px-0.5"
               >
                 <button
@@ -865,9 +939,15 @@ async function removeSheet() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
                   Técnica
                 </button>
-                <span v-if="lastTechnique(group) !== undefined" class="text-[12px] text-muted">
-                  La última vez: <span class="font-semibold text-ink">{{ lastTechnique(group) ?? 'normal' }}</span>
-                </span>
+                <button
+                  v-if="!readonly && group.sets.length > 0"
+                  class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  type="button"
+                  @click.stop="targetFor = group"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Objetivo
+                </button>
               </div>
 
               <div
@@ -1021,7 +1101,8 @@ async function removeSheet() {
             </div>
           </Collapse>
         </section>
-      </template>
+        </template>
+      </draggable>
 
       <p v-if="groups.length === 0" class="px-2 py-6 text-center text-sm text-dim">
         {{ readonly ? 'Este entreno no tiene ejercicios apuntados.' : 'Hoja vacía. Añade el primer ejercicio y apunta lo que hayas hecho.' }}
@@ -1118,6 +1199,18 @@ async function removeSheet() {
       subtitle="Solo para esta hoja: la rutina no cambia"
       @apply="applyTechnique"
       @close="techniqueFor = null"
+    />
+
+    <SetTargetSheet
+      v-if="targetFor"
+      :template="templateOf(targetFor.sets[nextPosition(targetFor)])"
+      :position="nextPosition(targetFor)"
+      :count="targetFor.sets.length"
+      :sets="targetFor.sets.map(templateOf)"
+      :exercise-name="targetFor.name"
+      subtitle="Solo para esta hoja: la rutina no cambia"
+      @apply="applyTarget"
+      @close="targetFor = null"
     />
 
     <ExerciseSheet
