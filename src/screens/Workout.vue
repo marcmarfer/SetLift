@@ -9,8 +9,8 @@ import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
-import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, targetOf } from '../lib/targets'
-import { startingWeight, weightLabel } from '../lib/bodyweight'
+import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
+import { extraLoad, startingWeight, weightLabel } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { blueprintOf, spendUpcoming } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
@@ -77,6 +77,7 @@ const editing = ref<{ setId: string; field: 'weight' | 'reps' } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
 const targetFor = ref<WorkoutGroup | null>(null)
+const bodyweightFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
 const draft = ref<SetEntry[] | null>(null)
 
@@ -532,6 +533,30 @@ function templateOf(set: SetEntry): SetTemplate {
   return { ...target, effort: effortOf(target) ?? undefined }
 }
 
+function targetSummary(group: WorkoutGroup) {
+  const labels = new Set(group.sets.map((set) => shortLabel(targetOf(set))))
+  return labels.size === 1 ? [...labels][0] : 'Varios objetivos'
+}
+
+function bodyweightOf(group: WorkoutGroup) {
+  return group.sets.find((set) => set.bodyweightKg != null)?.bodyweightKg ?? null
+}
+
+function applyBodyweight(value: number | null) {
+  bodyweightFor.value = null
+  if (value == null || value <= 0) return
+
+  for (const set of draftSets()) {
+    if (set.bodyweightKg == null) continue
+    const load = extraLoad(set) ?? 0
+    set.weight = Math.max(0, Math.round((value + load) * 100) / 100)
+    set.bodyweightKg = value
+  }
+
+  settings.bodyweightKg = value
+  save()
+}
+
 function nextPosition(group: WorkoutGroup) {
   return Math.max(group.sets.findIndex((set) => !set.done), 0)
 }
@@ -941,13 +966,18 @@ async function removeSheet() {
                 </button>
                 <button
                   v-if="!readonly && group.sets.length > 0"
-                  class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  class="num flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
                   type="button"
+                  aria-label="Cambiar el objetivo de las series"
                   @click.stop="targetFor = group"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                  Objetivo
-                </button>
+                >{{ targetSummary(group) }}</button>
+                <button
+                  v-if="!readonly && bodyweightOf(group) != null"
+                  class="num flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  type="button"
+                  aria-label="Cambiar tu peso corporal de hoy"
+                  @click.stop="bodyweightFor = group"
+                >BW {{ format(bodyweightOf(group) ?? 0) }} kg</button>
               </div>
 
               <div
@@ -1162,6 +1192,18 @@ async function removeSheet() {
       @create="openCreate"
       @pick="addExercise"
       @close="adding = false"
+    />
+
+    <NumberPad
+      v-else-if="bodyweightFor"
+      field="weight"
+      :value="bodyweightOf(bodyweightFor)"
+      :context="`${bodyweightFor.name} · se aplica a toda la hoja`"
+      :hint="null"
+      label="Tu peso hoy"
+      action="Aplicar"
+      @next="applyBodyweight"
+      @close="bodyweightFor = null"
     />
 
     <NumberPad

@@ -7,6 +7,8 @@ const props = defineProps<{
   value: number | null
   context: string
   hint: number | null
+  label?: string
+  action?: string
 }>()
 
 const emit = defineEmits<{
@@ -73,7 +75,7 @@ function pick(reps: number) {
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-[13px] font-semibold">{{ field === 'weight' ? 'Peso' : 'Reps' }}</span>
+        <span class="text-[13px] font-semibold">{{ label ?? (field === 'weight' ? 'Peso' : 'Reps') }}</span>
         <span class="flex-grow" />
         <span class="text-xs text-dim">{{ context }}</span>
       </div>
@@ -120,6 +122,6 @@ function pick(reps: number) {
       class="flex h-14 items-center justify-center rounded-2xl bg-accent text-base font-bold text-hero-ink"
       type="button"
       @click="emit('next', parsed)"
-    >Siguiente</button>
+    >{{ action ?? 'Siguiente' }}</button>
   </div>
 </template>
