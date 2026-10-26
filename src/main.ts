@@ -5,7 +5,7 @@ import { router } from './router'
 import { onLocalChange } from './db'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
-import { expireWeeklyLaterSessions, parkDeferredFromToday } from './lib/session'
+import { expireWeeklyLaterSessions, parkDeferredFromToday, pruneBlankSessions } from './lib/session'
 import { sync } from './lib/sync'
 import './composables/useInstallPrompt'
 import './style.css'
@@ -27,7 +27,9 @@ expireWeeklyLaterSessions()
     function catchUp() {
       const id = ready()
       if (!id) return
-      sync(id).catch((error) => console.error('[sync]', error))
+      sync(id)
+        .then(() => pruneBlankSessions())
+        .catch((error) => console.error('[sync]', error))
       settings
         .syncProfile(id)
         .then(() => settings.seedName(auth.displayName))

@@ -58,6 +58,12 @@ function laterThan(a: Session, b: Session) {
   return a.date === b.date ? a.updatedAt >= b.updatedAt : a.date > b.date
 }
 
+function replaces(candidate: Session, current: Session, progress: Record<string, SheetProgress>) {
+  const counted = counts(candidate, progress)
+  if (counted !== counts(current, progress)) return counted
+  return laterThan(candidate, current)
+}
+
 function latestByRoutine(
   sessions: Session[],
   progress: Record<string, SheetProgress>,
@@ -68,7 +74,7 @@ function latestByRoutine(
   for (const session of sessions) {
     if (!session.routineId || !matches(session)) continue
     const current = latest.get(session.routineId)
-    if (!current || laterThan(session, current)) latest.set(session.routineId, session)
+    if (!current || replaces(session, current, progress)) latest.set(session.routineId, session)
   }
 
   return new Set(
@@ -219,7 +225,8 @@ export function planWeek(
     const routineId = session.routineId as string
     const real = hasTraining(session, progress)
 
-    latest.set(routineId, session)
+    const current = latest.get(routineId)
+    if (!current || counts(session, progress) || !hasTraining(current, progress)) latest.set(routineId, session)
     if (real) repeats.set(routineId, (repeats.get(routineId) ?? 0) + 1)
   }
 

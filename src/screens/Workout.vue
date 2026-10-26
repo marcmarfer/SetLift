@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { useRoute, useRouter } from 'vue-router'
 import { db, newId, plain } from '../db'
@@ -7,7 +7,7 @@ import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
 import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
-import { bestOneRepMax, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
+import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
 import { extraLoad, startingWeight, weightLabel } from '../lib/bodyweight'
@@ -132,14 +132,28 @@ async function confirm() {
   if (finished && !props.readonly) router.push({ name: 'summary', params: { id: sessionId.value } })
 }
 
+let opened: string | null = null
+
+function leave() {
+  const id = opened
+  opened = null
+  if (!id || props.readonly) return
+  discardIfBlank(id).catch((error) => console.error('[sheet]', error))
+}
+
 watch(
   sessionId,
   (id) => {
+    if (route.name !== 'workout' && route.name !== 'workout-view') return
+    if (id !== opened) leave()
+    opened = id
     draft.value = readDraft<SetEntry[]>(id)
     followRoutine(id).catch((error) => console.error('[sheet]', error))
   },
   { immediate: true },
 )
+
+onBeforeUnmount(leave)
 
 const swapAlternatives = computed(() => {
   const group = swapping.value

@@ -336,6 +336,46 @@ export async function sessionOn(date: string, routineId: string | null) {
   return sheets.find((session) => session.routineId === routineId && !session.skipped) ?? null
 }
 
+const STALE_MS = 3 * 24 * 60 * 60 * 1000
+
+export async function discardIfBlank(sessionId: string) {
+  const session = await db.sessions.get(sessionId)
+  if (!session || session.skipped || session.later || session.edited || readDraft(sessionId)) return
+
+  const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
+  if (sets.some((set) => set.done)) return
+
+  await removeSession(sessionId)
+}
+
+export async function pruneBlankSessions(reference = Date.now()) {
+  const sessions = (await db.sessions.toArray()).filter((session) => !session.skipped)
+  const trainedIds = new Set(
+    (await db.sets.toArray()).filter((set) => set.done).map((set) => set.sessionId),
+  )
+
+  const slot = (session: Session) => `${session.date}|${session.routineId}`
+  const trainedSlots = new Set(
+    sessions.filter((session) => session.routineId && trainedIds.has(session.id)).map(slot),
+  )
+
+  const blank = sessions.filter(
+    (session) =>
+      !session.later &&
+      !trainedIds.has(session.id) &&
+      !readDraft(session.id) &&
+      ((session.routineId && trainedSlots.has(slot(session))) ||
+        (session.date < today() && session.updatedAt < reference - STALE_MS)),
+  )
+  if (blank.length === 0) return
+
+  const ids = blank.map((session) => session.id)
+  await db.transaction('rw', db.sessions, db.sets, async () => {
+    await db.sets.where('sessionId').anyOf(ids).delete()
+    await db.sessions.bulkDelete(ids)
+  })
+}
+
 export async function removeSession(sessionId: string) {
   await db.transaction('rw', db.sessions, db.sets, async () => {
     await db.sets.where('sessionId').equals(sessionId).delete()
