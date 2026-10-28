@@ -10,7 +10,7 @@ import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
-import { extraLoad, startingWeight, weightLabel } from '../lib/bodyweight'
+import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { blueprintOf, spendUpcoming } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
@@ -435,8 +435,20 @@ watch(
 function previousLabel(group: { previous: SetEntry[] }, index: number) {
   const before = group.previous[index - 1] ?? group.previous[group.previous.length - 1]
   if (!before || before.reps == null) return '—'
-  return `${format(before.weight ?? 0)} × ${before.reps}`
+  return `${weightLabel(before, format) ?? format(before.weight ?? 0)} × ${before.reps}`
 }
+
+function hasBodyweight(group: { sets: SetEntry[] }) {
+  return group.sets.some((set) => set.bodyweightKg != null)
+}
+
+function suggestedLoad(set: SetEntry, weight: number) {
+  if (set.bodyweightKg == null) return `${format(weight)} kg`
+  const load = extraLoad({ weight, bodyweightKg: set.bodyweightKg }) ?? 0
+  return load === 0 ? 'sin lastre' : `lastre ${loadText(load, format)} kg`
+}
+
+const editingLoad = computed(() => editing.value?.field === 'weight' && editingSet.value?.bodyweightKg != null)
 
 function targetLabel(set: SetEntry) {
   return repsLabel(targetOf(set))
@@ -644,8 +656,9 @@ function commit(value: number | null) {
   const target = change(set.id)
   if (!target) return
 
-  if (editing.value.field === 'weight') target.weight = value
-  else target.reps = value
+  if (editing.value.field === 'reps') target.reps = value
+  else if (target.bodyweightKg != null) target.weight = withLoad(target.bodyweightKg, value)
+  else target.weight = value
 
   save()
 }
@@ -1005,7 +1018,7 @@ async function removeSheet() {
               >
                 <span>Serie</span>
                 <span>Anterior</span>
-                <span class="text-center">kg</span>
+                <span class="text-center">{{ hasBodyweight(group) ? 'Lastre' : 'kg' }}</span>
                 <span class="text-center">Reps</span>
                 <span class="text-center">✓</span>
               </div>
@@ -1048,11 +1061,14 @@ async function removeSheet() {
                 :type="readonly ? null : 'button'"
                 @click.stop="!readonly && edit(set, 'weight')"
               >
-                <span class="text-[17px] font-semibold leading-tight">
+                <template v-if="set.bodyweightKg != null">
+                  <span class="text-[17px] font-semibold leading-tight">
+                    {{ loadText(extraLoad(set) ?? 0, format) }}
+                  </span>
+                  <span v-if="extraLoad(set)" class="text-[9px] font-semibold leading-none text-dim">kg</span>
+                </template>
+                <span v-else class="text-[17px] font-semibold leading-tight">
                   {{ set.weight == null ? '—' : format(set.weight) }}
-                </span>
-                <span v-if="weightLabel(set, format)" class="text-[9px] font-semibold leading-none text-dim">
-                  {{ weightLabel(set, format) }}
                 </span>
               </component>
 
@@ -1118,7 +1134,7 @@ async function removeSheet() {
             >
               <span class="flex-grow text-[12.5px] leading-snug text-accent-ink">
                 {{ suggestion(set, group)?.reps }} reps <span class="text-dim">→</span> prueba
-                <span class="num font-semibold text-ink">{{ format(suggestion(set, group)?.weight ?? 0) }} kg</span> en la siguiente
+                <span class="num font-semibold text-ink">{{ suggestedLoad(set, suggestion(set, group)?.weight ?? 0) }}</span> en la siguiente
               </span>
               <button
                 class="h-11 rounded-xl bg-accent px-3.5 text-[13px] font-bold text-hero-ink"
@@ -1229,8 +1245,10 @@ async function removeSheet() {
     <NumberPad
       v-else-if="editingSet && editing"
       :field="editing.field"
-      :value="editing.field === 'weight' ? editingSet.weight : editingSet.reps"
+      :value="editing.field === 'reps' ? editingSet.reps : editingLoad ? extraLoad(editingSet) || null : editingSet.weight"
       :context="`${editingGroup?.name ?? ''} · serie ${editingSet.index}`"
+      :label="editingLoad ? 'Lastre' : undefined"
+      :min="editingLoad ? -(editingSet.bodyweightKg ?? 0) : 0"
       :hint="editingGroup?.previous[editingSet.index - 1]?.reps ?? null"
       @commit="commit"
       @next="commitAndAdvance"

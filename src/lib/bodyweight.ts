@@ -28,6 +28,15 @@ export function startingWeight(
   return { weight: Math.max(0, round(bodyweightKg + load)), bodyweightKg }
 }
 
+export function withLoad(bodyweightKg: number, load: number | null): number {
+  return round(bodyweightKg + (load ?? 0))
+}
+
+export function loadText(load: number, format: (value: number) => string): string {
+  if (load === 0) return 'BW'
+  return `${load > 0 ? '+' : '-'}${format(Math.abs(load))}`
+}
+
 export function weightLabel(set: WeighedSet, format: (value: number) => string): string | null {
   const load = extraLoad(set)
   if (load == null || set.weight == null) return null

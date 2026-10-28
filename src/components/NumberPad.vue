@@ -10,6 +10,7 @@ const props = defineProps<{
   label?: string
   action?: string
   stepKg?: number
+  min?: number
 }>()
 
 const stepSize = computed(() => props.stepKg ?? 2.5)
@@ -60,7 +61,7 @@ function backspace() {
 
 function step(amount: number) {
   const current = parsed.value ?? 0
-  const next = Math.max(0, Math.round((current + amount) * 100) / 100)
+  const next = Math.max(props.min ?? 0, Math.round((current + amount) * 100) / 100)
   draft.value = String(next).replace('.', ',')
   emit('commit', parsed.value)
 }
