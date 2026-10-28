@@ -1248,7 +1248,6 @@ async function removeSheet() {
       :value="editing.field === 'reps' ? editingSet.reps : editingLoad ? extraLoad(editingSet) || null : editingSet.weight"
       :context="`${editingGroup?.name ?? ''} · serie ${editingSet.index}`"
       :label="editingLoad ? 'Lastre' : undefined"
-      :min="editingLoad ? -(editingSet.bodyweightKg ?? 0) : 0"
       :hint="editingGroup?.previous[editingSet.index - 1]?.reps ?? null"
       @commit="commit"
       @next="commitAndAdvance"
