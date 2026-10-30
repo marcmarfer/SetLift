@@ -11,12 +11,14 @@ import ExerciseSheet from '../components/ExerciseSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
+import GearSheet from '../components/GearSheet.vue'
+import { gearLabel, gearVaries, sharedGear, storedGear } from '../lib/gear'
 import { effortLabel, repsLabel, shortLabel } from '../lib/targets'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { bySession, dropPlan, findPlan, openPlans, preparePlan, setPlanning } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
-import type { Exercise, ExercisePlanning, Routine, RoutineExercise, Session, SetTemplate, SetType } from '../types'
+import type { Exercise, ExercisePlanning, Gear, Routine, RoutineExercise, Session, SetTemplate, SetType } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -326,6 +328,20 @@ function applyTechnique(technique: string | null) {
   return replace(index, { technique: technique ?? undefined })
 }
 
+const gearFor = ref<number | null>(null)
+
+function applyGear(gear: Gear[], all: boolean, position: number) {
+  const index = gearFor.value
+  gearFor.value = null
+  if (index === null) return
+  const item = items.value[index]
+  if (!item) return
+  const sets = item.sets.map((template, spot) =>
+    all || spot === position ? { ...template, gear: storedGear(gear) } : template,
+  )
+  return replace(index, { sets })
+}
+
 function shiftWeight(index: number, direction: -1 | 1) {
   const item = items.value[index]
   if (!item) return
@@ -595,6 +611,9 @@ function restLabel(item: RoutineExercise) {
                     <span v-if="effortLabel(template)" class="num text-[10.5px] font-semibold text-accent-ink">
                       {{ effortLabel(template) }}
                     </span>
+                    <span v-if="gearVaries(item.sets) && gearLabel(template.gear)" class="max-w-full truncate text-[10px] text-dim">
+                      {{ gearLabel(template.gear) }}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -607,6 +626,18 @@ function restLabel(item: RoutineExercise) {
                 <span class="flex-grow text-[13px] text-muted">Técnica</span>
                 <TechniqueTag v-if="item.technique" :technique="item.technique" class="text-[13px]" />
                 <span v-else class="text-[13px] font-semibold text-dim">Normal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+
+              <button
+                class="flex h-12 items-center gap-2.5 border-t border-line text-left"
+                type="button"
+                @click="gearFor = Number(index)"
+              >
+                <span class="flex-grow text-[13px] text-muted">Material</span>
+                <span v-if="gearVaries(item.sets)" class="text-[13px] font-semibold text-accent-ink">Por serie</span>
+                <span v-else-if="gearLabel(sharedGear(item.sets))" class="text-[13px] font-semibold text-accent-ink">{{ gearLabel(sharedGear(item.sets)) }}</span>
+                <span v-else class="text-[13px] font-semibold text-dim">Ninguno</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
               </button>
               </template>
@@ -814,6 +845,16 @@ function restLabel(item: RoutineExercise) {
       :exercise-name="editingTarget.name"
       @apply="applyTarget"
       @close="targetEditor = null"
+    />
+
+    <GearSheet
+      v-else-if="gearFor !== null && items[gearFor]"
+      :sets="items[gearFor].sets.map((template) => template.gear)"
+      :position="0"
+      :exercise-name="nameOf(items[gearFor].exerciseId)"
+      :subtitle="plannedId ? 'Solo para esta preparada' : 'En la rutina: se copia a la hoja de cada día'"
+      @apply="applyGear"
+      @close="gearFor = null"
     />
 
     <TechniqueSheet

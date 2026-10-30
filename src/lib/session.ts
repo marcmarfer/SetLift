@@ -3,6 +3,7 @@ import { addDays, sameWeek, today, weekStart } from './dates'
 import { estimateOneRepMax, progression } from './progress'
 import { forgetDraft, readDraft } from './draft'
 import { entryTarget } from './targets'
+import { normalGear, storedGear } from './gear'
 import { startingWeight } from './bodyweight'
 import { readBodyweightKg } from '../stores/settings'
 import { bySession, nextExercises, routineSessions } from './upcoming'
@@ -68,6 +69,7 @@ function entryFrom(
     index,
     ...entryTarget(template),
     technique,
+    gear: storedGear(template.gear),
     ...load,
     reps: null,
     done: false,
@@ -159,6 +161,7 @@ function shapeOf(sets: SetEntry[], weighed: Set<number>) {
         set.targetRpe ?? null,
         set.targetEffort ?? null,
         set.technique?.trim().toLowerCase() || null,
+        normalGear(set.gear).join() || null,
         weighed.has(set.slot ?? -1) ? set.weight : null,
       ]),
     )

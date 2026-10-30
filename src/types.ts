@@ -22,6 +22,8 @@ export type SetType = RepsTarget | 'rir' | 'failure'
 
 export type EffortTarget = 'rpe' | 'rir' | 'failure'
 
+export type Gear = 'chalk' | 'belt' | 'straps' | 'wristWraps' | 'kneeSleeves'
+
 export interface ExerciseFamily {
   id: string
   name: string
@@ -60,6 +62,7 @@ export interface SetTemplate {
   rpe?: number
   effort?: EffortTarget
   weight?: number
+  gear?: Gear[]
 }
 
 export interface RoutineExercise {
@@ -130,6 +133,7 @@ export interface SetEntry {
   targetRpe?: number
   targetEffort?: EffortTarget
   technique?: string | null
+  gear?: Gear[] | null
   weight: number | null
   bodyweightKg?: number
   reps: number | null

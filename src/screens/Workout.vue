@@ -12,10 +12,12 @@ import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
+import { gearLabel, gearVaries, normalGear, sharedGear } from '../lib/gear'
 import { blueprintOf, spendUpcoming } from '../lib/upcoming'
 import TechniqueTag from '../components/TechniqueTag.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
+import GearSheet from '../components/GearSheet.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -28,7 +30,7 @@ import Collapse from '../components/Collapse.vue'
 import RestBar from '../components/RestBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Calendar from '../components/Calendar.vue'
-import type { Exercise, Routine, RoutineExercise, Session, SetEntry, SetTemplate } from '../types'
+import type { Exercise, Gear, Routine, RoutineExercise, Session, SetEntry, SetTemplate } from '../types'
 
 interface WorkoutGroup {
   slot: number
@@ -76,6 +78,7 @@ const openExerciseId = ref<string | null>(null)
 const editing = ref<{ setId: string; field: 'weight' | 'reps' } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
+const gearFor = ref<WorkoutGroup | null>(null)
 const targetFor = ref<WorkoutGroup | null>(null)
 const bodyweightFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
@@ -554,6 +557,21 @@ function applyTechnique(technique: string | null) {
   save()
 }
 
+function applyGear(gear: Gear[], all: boolean, position: number) {
+  const group = gearFor.value
+  gearFor.value = null
+  if (!group) return
+
+  for (const [spot, set] of group.sets.entries()) {
+    if (!all && spot !== position) continue
+    const target = change(set.id)
+    if (target) target.gear = gear.length ? normalGear(gear) : null
+  }
+  save()
+}
+
+const hasGear = (group: WorkoutGroup) => group.sets.some((set) => normalGear(set.gear).length > 0)
+
 function templateOf(set: SetEntry): SetTemplate {
   const target = targetOf(set)
   return { ...target, effort: effortOf(target) ?? undefined }
@@ -975,7 +993,7 @@ async function removeSheet() {
           <Collapse :open="group.exerciseId === openId" :panel-id="`panel-${group.exerciseId}`">
             <div class="flex flex-col gap-2.5 px-3 pb-3 pt-2.5">
               <div
-                v-if="!readonly || group.technique"
+                v-if="!readonly || group.technique || hasGear(group)"
                 class="flex flex-wrap items-center gap-2 px-0.5"
               >
                 <button
@@ -1003,6 +1021,21 @@ async function removeSheet() {
                   aria-label="Cambiar el objetivo de las series"
                   @click.stop="targetFor = group"
                 >{{ targetSummary(group) }}</button>
+                <button
+                  v-if="!readonly && group.sets.length > 0"
+                  class="flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-medium text-muted"
+                  :class="hasGear(group) ? 'border-line-btn' : 'border-dashed border-line-btn'"
+                  type="button"
+                  aria-label="Cambiar el material de las series"
+                  @click.stop="gearFor = group"
+                >
+                  <svg v-if="!hasGear(group)" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  {{ gearVaries(group.sets) ? 'Material por serie' : gearLabel(sharedGear(group.sets)) || 'Material' }}
+                </button>
+                <span
+                  v-else-if="readonly && hasGear(group)"
+                  class="flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                >{{ gearVaries(group.sets) ? 'Material por serie' : gearLabel(sharedGear(group.sets)) }}</span>
                 <button
                   v-if="!readonly && bodyweightOf(group) != null"
                   class="num flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
@@ -1050,7 +1083,10 @@ async function removeSheet() {
                 >{{ effortLabel(targetOf(set)) }}</span>
               </div>
 
-              <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
+                <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="truncate text-[10.5px] font-semibold text-accent-ink">{{ gearLabel(set.gear) }}</span>
+              </div>
 
               <component
                 :is="readonly ? 'span' : 'button'"
@@ -1278,6 +1314,16 @@ async function removeSheet() {
       subtitle="Solo para esta hoja: la rutina no cambia"
       @apply="applyTechnique"
       @close="techniqueFor = null"
+    />
+
+    <GearSheet
+      v-if="gearFor"
+      :sets="gearFor.sets.map((set) => set.gear)"
+      :position="nextPosition(gearFor)"
+      :exercise-name="gearFor.name"
+      subtitle="Solo para esta hoja: la rutina no cambia"
+      @apply="applyGear"
+      @close="gearFor = null"
     />
 
     <SetTargetSheet
