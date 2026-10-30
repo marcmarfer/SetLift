@@ -22,9 +22,9 @@ export const storedGear = (gear: readonly Gear[] | null | undefined) => {
   return list.length ? list : undefined
 }
 
-export function gearLabel(gear: readonly Gear[] | null | undefined): string {
+export function gearLabel(gear: readonly Gear[] | null | undefined, separator = ' + '): string {
   const names = normalGear(gear).map((value) => GEAR_OPTIONS.find((option) => option.value === value)!.label)
-  return names.map((name, spot) => (spot === 0 ? name : name.toLowerCase())).join(' + ')
+  return names.map((name, spot) => (spot === 0 ? name : name.toLowerCase())).join(separator)
 }
 
 type Geared = ReadonlyArray<{ gear?: readonly Gear[] | null }>

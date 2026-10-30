@@ -1085,7 +1085,7 @@ async function removeSheet() {
 
               <div class="flex min-w-0 flex-col gap-0.5">
                 <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
-                <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="text-[10.5px] font-semibold leading-tight text-accent-ink">{{ gearLabel(set.gear) }}</span>
+                <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="text-[10px] font-medium leading-tight text-accent-ink">{{ gearLabel(set.gear, ', ') }}</span>
               </div>
 
               <component
