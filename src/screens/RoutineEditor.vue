@@ -611,7 +611,7 @@ function restLabel(item: RoutineExercise) {
                     <span v-if="effortLabel(template)" class="num text-[10.5px] font-semibold text-accent-ink">
                       {{ effortLabel(template) }}
                     </span>
-                    <span v-if="gearVaries(item.sets) && gearLabel(template.gear)" class="max-w-full truncate text-[10px] text-dim">
+                    <span v-if="gearVaries(item.sets) && gearLabel(template.gear)" class="text-center text-[10px] leading-tight text-dim">
                       {{ gearLabel(template.gear) }}
                     </span>
                   </button>
