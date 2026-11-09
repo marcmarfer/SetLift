@@ -1,8 +1,6 @@
 import { supabase } from './supabase'
 
-const ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/workouts`
-
-export const shareUrl = (token: string) => `${ENDPOINT}?token=${token}`
+export const API_ENDPOINT = 'https://setlift.es/api/v1/workouts'
 
 export interface ShareLink {
   token: string

@@ -7,6 +7,7 @@ const HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'x-api-key',
   'Cache-Control': 'no-store',
 }
 
@@ -86,7 +87,7 @@ Deno.serve(async (request) => {
   if (request.method !== 'GET') return reply(405, { error: 'method_not_allowed' })
 
   const params = new URL(request.url).searchParams
-  const token = params.get('token') ?? ''
+  const token = request.headers.get('x-api-key') ?? ''
   const from = params.get('from')
   const to = params.get('to')
   const limit = params.get('limit') ? Number(params.get('limit')) : null
@@ -184,7 +185,7 @@ Deno.serve(async (request) => {
         'weight_kg on bodyweight exercises is the total moved; bodyweight_kg is the body share and added_load_kg the extra load (negative = assisted)',
         'target is what was planned for the set; effort (rir / rpe / failure) is a target, not logged',
         'gear values: chalk, belt, straps, wristWraps, kneeSleeves',
-        'query params: from=YYYY-MM-DD, to=YYYY-MM-DD, limit=N (latest N workouts)',
+        'send the key as Authorization: Bearer <key>; query params: from=YYYY-MM-DD, to=YYYY-MM-DD, limit=N (latest N workouts)',
       ],
       workouts,
     })

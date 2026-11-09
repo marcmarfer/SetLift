@@ -69,12 +69,13 @@ propagates. `src/lib/rows.ts` maps camelCase ↔ snake_case and sends every loca
 column, so a new field needs its Supabase column before the app writes it. The database schema
 lives only in Supabase — there are no SQL files in the repo.
 
-**Sharing** (`src/lib/shareLink.ts`, `supabase/functions/workouts/`): `share_links` (token, user_id)
-lives only on the server and is not synced. The `workouts` Edge Function (no JWT) takes
-`?token=` and returns that user's workouts as JSON with targets, technique, gear and load, for
-another app to read. `from`, `to` and `limit` narrow it. Deleting the row revokes the link.
-Only users listed in `api_access` (granted by hand on the server) see the section, can create a link
-or get data back.
+**Workouts API** (`src/lib/shareLink.ts`, `supabase/functions/workouts/`, `worker/index.ts`):
+`share_links` (token, user_id) lives only on the server and is not synced; the token is the API
+key. `GET https://setlift.es/api/v1/workouts` with `Authorization: Bearer <key>` hits the Cloudflare
+worker, which forwards to the `workouts` Edge Function (no JWT) as `x-api-key`. It returns that
+user's workouts as JSON with targets, technique, gear and load; `from`, `to` and `limit` narrow it.
+Deleting the row revokes the key. Only users listed in `api_access` (granted by hand on the server)
+see the section, can create a key or get data back.
 
 **Auth** (`src/stores/auth.ts`): the gate is a local marker, not the Supabase token, so the app
 opens offline and stays signed in until an explicit sign-out. The marker is written only once the
