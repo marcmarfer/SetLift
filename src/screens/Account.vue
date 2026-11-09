@@ -6,6 +6,7 @@ import { useLive } from '../composables/useLive'
 import { useInstallPrompt } from '../composables/useInstallPrompt'
 import { longDay } from '../lib/dates'
 import { deleteAllTraining } from '../lib/localData'
+import { createShareToken, currentShareToken, revokeShareTokens, shareUrl } from '../lib/shareLink'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -36,6 +37,53 @@ async function wipe() {
 }
 
 onMounted(() => auth.refreshFactors())
+
+const shareToken = ref<string | null>(null)
+const shareState = ref<'loading' | 'ready' | 'busy' | 'offline'>('loading')
+const shareCopied = ref(false)
+const unsharing = ref(false)
+
+async function loadShare() {
+  try {
+    shareToken.value = await currentShareToken()
+    shareState.value = 'ready'
+  } catch {
+    shareState.value = 'offline'
+  }
+}
+
+onMounted(loadShare)
+
+async function startSharing() {
+  shareState.value = 'busy'
+  try {
+    shareToken.value = await createShareToken()
+    shareState.value = 'ready'
+  } catch {
+    shareState.value = 'offline'
+  }
+}
+
+async function stopSharing() {
+  unsharing.value = false
+  shareState.value = 'busy'
+  try {
+    await revokeShareTokens()
+    shareToken.value = null
+    shareState.value = 'ready'
+  } catch {
+    shareState.value = 'offline'
+  }
+}
+
+async function copyShareUrl() {
+  if (!shareToken.value) return
+  try {
+    await navigator.clipboard.writeText(shareUrl(shareToken.value))
+    shareCopied.value = true
+    setTimeout(() => (shareCopied.value = false), 2000)
+  } catch {}
+}
 
 const sessions = useLive<Session[]>(async () => db.sessions.toArray(), [])
 
@@ -193,6 +241,40 @@ async function importBackup(event: Event) {
       </section>
 
       <section class="flex flex-col gap-2">
+        <span class="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Compartir entrenos</span>
+        <div class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 shadow-card">
+          <template v-if="shareToken">
+            <div class="flex flex-col gap-1 py-3.5">
+              <span class="text-[14.5px]">Enlace para otra app</span>
+              <span class="num break-all text-xs text-faint">{{ shareUrl(shareToken) }}</span>
+            </div>
+            <button class="flex h-14 items-center gap-2.5 border-t border-line" type="button" @click="copyShareUrl">
+              <span class="flex-grow text-left text-[14.5px]">{{ shareCopied ? 'Copiado' : 'Copiar enlace' }}</span>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>
+            </button>
+            <button class="flex h-14 items-center gap-2.5 border-t border-line" type="button" :disabled="shareState === 'busy'" @click="unsharing = true">
+              <span class="flex-grow text-left text-[14.5px] text-danger">Dejar de compartir</span>
+            </button>
+          </template>
+          <button
+            v-else
+            class="flex h-14 items-center gap-2.5"
+            type="button"
+            :disabled="shareState !== 'ready'"
+            @click="startSharing"
+          >
+            <span class="flex-grow text-left text-[14.5px]">Crear enlace para otra app</span>
+            <span v-if="shareState === 'busy' || shareState === 'loading'" class="text-xs text-faint">…</span>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+        <p class="px-1 text-xs text-faint">
+          <template v-if="shareState === 'offline'">Necesitas conexión para gestionar el enlace. <button class="text-accent" type="button" @click="loadShare">Reintentar</button></template>
+          <template v-else>Quien tenga el enlace ve todos tus entrenos, con series, objetivos, técnica y material.</template>
+        </p>
+      </section>
+
+      <section class="flex flex-col gap-2">
         <span class="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Ayuda</span>
         <div class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 shadow-card">
           <RouterLink to="/tour" class="flex h-14 items-center gap-2.5">
@@ -244,6 +326,15 @@ async function importBackup(event: Event) {
         </button>
       </template>
     </div>
+
+    <ConfirmDialog
+      v-if="unsharing"
+      title="Dejar de compartir"
+      message="El enlace deja de funcionar y la otra app ya no podrá leer tus entrenos. Si luego creas otro, será un enlace nuevo."
+      label="Dejar de compartir"
+      @confirm="stopSharing"
+      @close="unsharing = false"
+    />
 
     <ConfirmDialog
       v-if="wiping"

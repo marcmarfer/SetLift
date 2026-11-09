@@ -69,6 +69,11 @@ propagates. `src/lib/rows.ts` maps camelCase ↔ snake_case and sends every loca
 column, so a new field needs its Supabase column before the app writes it. The database schema
 lives only in Supabase — there are no SQL files in the repo.
 
+**Sharing** (`src/lib/shareLink.ts`, `supabase/functions/workouts/`): `share_links` (token, user_id)
+lives only on the server and is not synced. The `workouts` Edge Function (no JWT) takes
+`?token=` and returns that user's workouts as JSON with targets, technique, gear and load, for
+another app to read. `from`, `to` and `limit` narrow it. Deleting the row revokes the link.
+
 **Auth** (`src/stores/auth.ts`): the gate is a local marker, not the Supabase token, so the app
 opens offline and stays signed in until an explicit sign-out. The marker is written only once the
 second factor is done. Signing out empties the device (`src/lib/localData.ts`).
