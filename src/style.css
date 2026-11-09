@@ -125,6 +125,13 @@ body {
   * {
     touch-action: manipulation;
   }
+
+  /* A flex item's min-height is its content, so in a column that scrolls a fixed-height
+     button gets squashed to its text instead of overflowing. Scrolling handles the overflow. */
+  .flex-col.overflow-y-auto > *,
+  .flex-col.overflow-auto > * {
+    flex-shrink: 0;
+  }
 }
 
 @media (pointer: coarse) {

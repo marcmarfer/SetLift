@@ -45,7 +45,7 @@ async function useAnotherAccount() {
       <p class="text-sm leading-relaxed text-muted">Solo esto y un repaso rápido de cómo funciona.</p>
     </div>
 
-    <div class="flex flex-grow flex-col justify-center gap-3.5 overflow-y-auto px-5 py-6">
+    <div class="flex flex-grow flex-col justify-center-safe gap-3.5 overflow-y-auto px-5 py-6">
       <AvatarPicker v-model="avatar" :initials="initials" />
 
       <label class="flex flex-col gap-1.5">
