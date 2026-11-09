@@ -100,6 +100,9 @@ Deno.serve(async (request) => {
     if (!link) return reply(404, { error: 'not_found' })
     const userId = link.user_id as string
 
+    const { data: allowed } = await db.from('api_access').select('user_id').eq('user_id', userId).maybeSingle()
+    if (!allowed) return reply(404, { error: 'not_found' })
+
     const sessions = await all((a, b) => {
       let query = db.from('sessions').select('*').eq('user_id', userId).is('deleted_at', null)
       if (from) query = query.gte('date', from)

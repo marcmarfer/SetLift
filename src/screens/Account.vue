@@ -4,9 +4,9 @@ import { useRouter } from 'vue-router'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
 import { useInstallPrompt } from '../composables/useInstallPrompt'
-import { longDay } from '../lib/dates'
+import { longDay, shortDate, toIso } from '../lib/dates'
 import { deleteAllTraining } from '../lib/localData'
-import { createShareToken, currentShareToken, revokeShareTokens, shareUrl } from '../lib/shareLink'
+import { createShareLink, currentShareLink, hasApiAccess, revokeShareTokens, shareUrl, type ShareLink } from '../lib/shareLink'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -38,14 +38,16 @@ async function wipe() {
 
 onMounted(() => auth.refreshFactors())
 
-const shareToken = ref<string | null>(null)
+const apiAccess = ref(false)
+const shareLink = ref<ShareLink | null>(null)
 const shareState = ref<'loading' | 'ready' | 'busy' | 'offline'>('loading')
 const shareCopied = ref(false)
 const unsharing = ref(false)
 
 async function loadShare() {
   try {
-    shareToken.value = await currentShareToken()
+    apiAccess.value = await hasApiAccess()
+    if (apiAccess.value) shareLink.value = await currentShareLink()
     shareState.value = 'ready'
   } catch {
     shareState.value = 'offline'
@@ -57,7 +59,7 @@ onMounted(loadShare)
 async function startSharing() {
   shareState.value = 'busy'
   try {
-    shareToken.value = await createShareToken()
+    shareLink.value = await createShareLink()
     shareState.value = 'ready'
   } catch {
     shareState.value = 'offline'
@@ -69,7 +71,7 @@ async function stopSharing() {
   shareState.value = 'busy'
   try {
     await revokeShareTokens()
-    shareToken.value = null
+    shareLink.value = null
     shareState.value = 'ready'
   } catch {
     shareState.value = 'offline'
@@ -77,9 +79,9 @@ async function stopSharing() {
 }
 
 async function copyShareUrl() {
-  if (!shareToken.value) return
+  if (!shareLink.value) return
   try {
-    await navigator.clipboard.writeText(shareUrl(shareToken.value))
+    await navigator.clipboard.writeText(shareUrl(shareLink.value.token))
     shareCopied.value = true
     setTimeout(() => (shareCopied.value = false), 2000)
   } catch {}
@@ -240,20 +242,21 @@ async function importBackup(event: Event) {
         <p v-if="importing" class="px-1 text-xs text-accent">{{ importing }}</p>
       </section>
 
-      <section class="flex flex-col gap-2">
-        <span class="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Compartir entrenos</span>
+      <section v-if="apiAccess" class="flex flex-col gap-2">
+        <span class="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Conectar con otra app</span>
         <div class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 shadow-card">
-          <template v-if="shareToken">
-            <div class="flex flex-col gap-1 py-3.5">
-              <span class="text-[14.5px]">Enlace para otra app</span>
-              <span class="num break-all text-xs text-faint">{{ shareUrl(shareToken) }}</span>
+          <template v-if="shareLink">
+            <div class="flex h-14 items-center gap-2.5">
+              <span class="h-2 w-2 shrink-0 rounded-full bg-ok" />
+              <span class="flex-grow text-[14.5px]">Enlace de API activo</span>
+              <span class="num text-xs text-faint">desde el {{ shortDate(toIso(new Date(shareLink.createdAt))) }}</span>
             </div>
             <button class="flex h-14 items-center gap-2.5 border-t border-line" type="button" @click="copyShareUrl">
-              <span class="flex-grow text-left text-[14.5px]">{{ shareCopied ? 'Copiado' : 'Copiar enlace' }}</span>
+              <span class="flex-grow text-left text-[14.5px]">{{ shareCopied ? 'Copiado' : 'Copiar enlace de API' }}</span>
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>
             </button>
             <button class="flex h-14 items-center gap-2.5 border-t border-line" type="button" :disabled="shareState === 'busy'" @click="unsharing = true">
-              <span class="flex-grow text-left text-[14.5px] text-danger">Dejar de compartir</span>
+              <span class="flex-grow text-left text-[14.5px] text-danger">Desactivar enlace</span>
             </button>
           </template>
           <button
@@ -263,14 +266,15 @@ async function importBackup(event: Event) {
             :disabled="shareState !== 'ready'"
             @click="startSharing"
           >
-            <span class="flex-grow text-left text-[14.5px]">Crear enlace para otra app</span>
+            <span class="flex-grow text-left text-[14.5px]">Crear enlace de API</span>
+            <span class="num text-xs text-faint">json</span>
             <span v-if="shareState === 'busy' || shareState === 'loading'" class="text-xs text-faint">…</span>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-icon"><path d="M9 6l6 6-6 6" /></svg>
           </button>
         </div>
         <p class="px-1 text-xs text-faint">
           <template v-if="shareState === 'offline'">Necesitas conexión para gestionar el enlace. <button class="text-accent" type="button" @click="loadShare">Reintentar</button></template>
-          <template v-else>Quien tenga el enlace ve todos tus entrenos, con series, objetivos, técnica y material.</template>
+          <template v-else>Tus entrenos en JSON, para que los lea otra app.</template>
         </p>
       </section>
 
@@ -329,9 +333,9 @@ async function importBackup(event: Event) {
 
     <ConfirmDialog
       v-if="unsharing"
-      title="Dejar de compartir"
+      title="Desactivar el enlace de API"
       message="El enlace deja de funcionar y la otra app ya no podrá leer tus entrenos. Si luego creas otro, será un enlace nuevo."
-      label="Dejar de compartir"
+      label="Desactivar enlace"
       @confirm="stopSharing"
       @close="unsharing = false"
     />

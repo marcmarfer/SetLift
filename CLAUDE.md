@@ -73,6 +73,8 @@ lives only in Supabase — there are no SQL files in the repo.
 lives only on the server and is not synced. The `workouts` Edge Function (no JWT) takes
 `?token=` and returns that user's workouts as JSON with targets, technique, gear and load, for
 another app to read. `from`, `to` and `limit` narrow it. Deleting the row revokes the link.
+Only users listed in `api_access` (granted by hand on the server) see the section, can create a link
+or get data back.
 
 **Auth** (`src/stores/auth.ts`): the gate is a local marker, not the Supabase token, so the app
 opens offline and stays signed in until an explicit sign-out. The marker is written only once the
