@@ -6,6 +6,7 @@ import { useSheetDrag } from '../composables/useSheetDrag'
 import { preferencesById } from '../lib/preferences'
 import { setsByMuscleGroup, trends, type ExerciseTrend } from '../lib/progress'
 import { addDays, today } from '../lib/dates'
+import { folded, matches } from '../lib/search'
 import AccountButton from '../components/AccountButton.vue'
 import Select from '../components/Select.vue'
 import TrendRow from '../components/TrendRow.vue'
@@ -77,14 +78,12 @@ function score(trend: ExerciseTrend) {
 
 const search = ref('')
 
-const folded = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-
 const visibleTrends = computed(() => {
   const cutoff = addDays(today(), -ACTIVE_DAYS)
   const term = folded(search.value.trim())
 
   const list = exerciseTrends.value.filter((trend) => {
-    if (term && !folded(trend.exercise.name).includes(term)) return false
+    if (term && !matches(trend.exercise.name, term)) return false
     if (groupFilter.value && trend.exercise.group !== groupFilter.value) return false
     if (activeOnly.value && trend.best.date < cutoff) return false
     if (trendFilter.value === 'up') return trend.change > 0

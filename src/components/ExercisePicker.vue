@@ -4,6 +4,7 @@ import Select from './Select.vue'
 import { useLive } from '../composables/useLive'
 import { useSheetDrag } from '../composables/useSheetDrag'
 import { db } from '../db'
+import { folded, matches } from '../lib/search'
 import type { Exercise, ExerciseFamily } from '../types'
 
 const props = defineProps<{
@@ -45,14 +46,12 @@ const suggested = computed(() =>
     .filter((exercise): exercise is Exercise => Boolean(exercise)),
 )
 
-const contains = (text: string | undefined, term: string) => Boolean(text?.toLowerCase().includes(term))
-
 const byOrder = (a: Exercise, b: Exercise) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, 'es')
 
 const labelOf = (entry: Entry) => (entry.kind === 'family' ? entry.family.name : entry.exercise.name)
 
 const entries = computed<Entry[]>(() => {
-  const term = search.value.trim().toLowerCase()
+  const term = folded(search.value.trim())
   const familyById = new Map(families.value.map((family) => [family.id, family]))
   const members = new Map<string, Exercise[]>()
   const loose: Exercise[] = []
@@ -68,17 +67,17 @@ const entries = computed<Entry[]>(() => {
 
   for (const [id, variants] of members) {
     const family = familyById.get(id)!
-    const whole = !term || contains(family.name, term) || contains(family.group, term)
+    const whole = !term || matches(family.name, term) || matches(family.group, term)
     const hits = whole
       ? variants
-      : variants.filter((exercise) => contains(exercise.name, term) || contains(exercise.variant, term))
+      : variants.filter((exercise) => matches(exercise.name, term) || matches(exercise.variant, term))
 
     if (hits.length === 1) loose.push(hits[0])
     else if (hits.length > 1) list.push({ kind: 'family', family, variants: [...hits].sort(byOrder), narrowed: !whole })
   }
 
   for (const exercise of loose) {
-    const kept = !term || contains(exercise.name, term) || contains(exercise.group, term) || contains(exercise.variant, term)
+    const kept = !term || matches(exercise.name, term) || matches(exercise.group, term) || matches(exercise.variant, term)
     if (kept) list.push({ kind: 'exercise', exercise })
   }
 
