@@ -112,6 +112,8 @@ export interface Session {
   freestyle?: boolean
   later?: boolean
   edited?: boolean
+  deload?: boolean
+  deloadByWeek?: boolean
   name?: string
   note?: string
   updatedAt: number

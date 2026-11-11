@@ -4,7 +4,7 @@ import type { ExercisePlanning, PlannedSets, Routine, RoutineExercise, Session, 
 export const bySession = (exercise: RoutineExercise) => exercise.planning === 'sessions'
 
 function aliveIds(sessions: Session[]) {
-  return new Set(sessions.filter((session) => !session.skipped).map((session) => session.id))
+  return new Set(sessions.filter((session) => !session.skipped && !session.deload).map((session) => session.id))
 }
 
 export function openPlans(exercise: RoutineExercise, sessions: Session[]): PlannedSets[] {
@@ -65,7 +65,7 @@ async function saveExercises(routine: Routine, exercises: RoutineExercise[]) {
 }
 
 export async function spendUpcoming(session: Session, sets: SetEntry[]) {
-  if (!session.routineId || session.freestyle) return
+  if (!session.routineId || session.freestyle || session.deload) return
 
   const routine = await db.routines.get(session.routineId)
   if (!routine?.exercises.some((exercise) => bySession(exercise) && exercise.upcoming?.length)) return

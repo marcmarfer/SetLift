@@ -51,10 +51,14 @@ const data = useLive<DetailData>(
   async () => {
     const exercise = (await db.exercises.get(exerciseId.value)) ?? null
     const preference = (await db.exercisePreferences.get(exerciseId.value)) ?? null
-    const sets = (await db.sets.where('exerciseId').equals(exerciseId.value).toArray())
+    const done = (await db.sets.where('exerciseId').equals(exerciseId.value).toArray())
       .filter((set) => set.done && set.reps)
-    const ids = [...new Set(sets.map((set) => set.sessionId))]
-    const sessions = (await db.sessions.bulkGet(ids)).filter((item): item is Session => Boolean(item))
+    const ids = [...new Set(done.map((set) => set.sessionId))]
+    const sessions = (await db.sessions.bulkGet(ids))
+      .filter((item): item is Session => Boolean(item))
+      .filter((item) => !item.deload)
+    const counted = new Set(sessions.map((item) => item.id))
+    const sets = done.filter((set) => counted.has(set.sessionId))
     return { exercise, preference, sets, sessions }
   },
   { exercise: null, preference: null, sets: [], sessions: [] },

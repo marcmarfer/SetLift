@@ -79,7 +79,9 @@ export function trends(
   sessions: Session[],
   sets: SetEntry[],
 ): ExerciseTrend[] {
-  const dateOf = new Map(sessions.map((session) => [session.id, session.date]))
+  const dateOf = new Map(
+    sessions.filter((session) => !session.deload).map((session) => [session.id, session.date]),
+  )
   const byExercise = new Map<string, Map<string, SetEntry[]>>()
 
   for (const set of sets) {

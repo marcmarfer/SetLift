@@ -5,31 +5,39 @@ import { forgetDraft, readDraft } from './draft'
 import { entryTarget } from './targets'
 import { normalGear, storedGear } from './gear'
 import { startingWeight } from './bodyweight'
-import { readBodyweightKg } from '../stores/settings'
-import { bySession, nextExercises, routineSessions } from './upcoming'
+import { readBodyweightKg, readDeloadWeek } from '../stores/settings'
+import { bySession, nextExercises, routineSessions, spendUpcoming } from './upcoming'
 import type { Routine, Session, SetEntry, SetTemplate } from '../types'
 
 const now = () => Date.now()
 
-async function datesOf(sessionIds: string[]) {
-  const sessions = await db.sessions.bulkGet(sessionIds)
+async function sheetsOf(sets: SetEntry[]) {
+  const sessions = await db.sessions.bulkGet([...new Set(sets.map((set) => set.sessionId))])
   return new Map(
-    sessions.filter((session): session is Session => Boolean(session)).map((item) => [item.id, item.date]),
+    sessions.filter((session): session is Session => Boolean(session)).map((item) => [item.id, item]),
   )
 }
+
+function countsBefore(sheets: Map<string, Session>, before?: string) {
+  return (sessionId: string) => {
+    const sheet = sheets.get(sessionId)
+    return !sheet?.deload && (!before || (sheet?.date ?? '') < before)
+  }
+}
+
+const deloadMark = (date: string) => (weekStart(date) === readDeloadWeek() ? { deload: true, deloadByWeek: true } : {})
 
 export async function previousSession(exerciseId: string, excludeSessionId?: string, before?: string) {
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const done = sets.filter((set) => set.done && set.sessionId !== excludeSessionId)
   if (done.length === 0) return []
 
-  const dateOf = await datesOf([...new Set(done.map((set) => set.sessionId))])
-  const ids = [...new Set(done.map((set) => set.sessionId))].filter(
-    (id) => !before || (dateOf.get(id) ?? '') < before,
-  )
+  const sheets = await sheetsOf(done)
+  const ids = [...new Set(done.map((set) => set.sessionId))].filter(countsBefore(sheets, before))
   if (ids.length === 0) return []
 
-  const lastId = [...ids].sort((a, b) => ((dateOf.get(a) ?? '') < (dateOf.get(b) ?? '') ? 1 : -1))[0]
+  const dateOf = (id: string) => sheets.get(id)?.date ?? ''
+  const lastId = [...ids].sort((a, b) => (dateOf(a) < dateOf(b) ? 1 : -1))[0]
 
   return done.filter((set) => set.sessionId === lastId).sort((a, b) => a.index - b.index)
 }
@@ -45,10 +53,10 @@ export async function carriedSets(exerciseId: string, increment: number, exclude
 export async function bestOneRepMax(exerciseId: string, excludeSessionId?: string, before?: string) {
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const done = sets.filter((set) => set.done && set.sessionId !== excludeSessionId && set.reps)
-  const dateOf = await datesOf([...new Set(done.map((set) => set.sessionId))])
+  const counts = countsBefore(await sheetsOf(done), before)
 
   return done
-    .filter((set) => !before || (dateOf.get(set.sessionId) ?? '') < before)
+    .filter((set) => counts(set.sessionId))
     .reduce((best, set) => Math.max(best, estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)), 0)
 }
 
@@ -138,7 +146,7 @@ export async function openWorkout(routine: Routine, planId: string | null, date 
   const entries = await templateEntries(routine, sessionId, date)
 
   await db.transaction('rw', db.sessions, db.sets, async () => {
-    await db.sessions.put({ id: sessionId, date, routineId: routine.id, planId, updatedAt: now() })
+    await db.sessions.put({ id: sessionId, date, routineId: routine.id, planId, ...deloadMark(date), updatedAt: now() })
     await db.sets.bulkPut(entries)
   })
 
@@ -193,7 +201,7 @@ export async function followRoutine(sessionId: string) {
 
 export async function openFreeWorkout(date = today()) {
   const id = newId()
-  await db.sessions.put({ id, date, routineId: null, planId: null, updatedAt: now() })
+  await db.sessions.put({ id, date, routineId: null, planId: null, ...deloadMark(date), updatedAt: now() })
   return id
 }
 
@@ -216,7 +224,7 @@ export async function openFreestyleWorkout(routineId: string, planId: string | n
   }
 
   const id = newId()
-  await db.sessions.put({ id, date, routineId, planId, freestyle: true, updatedAt: now() })
+  await db.sessions.put({ id, date, routineId, planId, freestyle: true, ...deloadMark(date), updatedAt: now() })
   return id
 }
 
@@ -334,6 +342,27 @@ export async function moveSession(sessionId: string, date: string) {
   await db.sessions.update(sessionId, { date, updatedAt: now() })
 }
 
+async function markDeload(sessionId: string, deload: boolean, deloadByWeek: boolean) {
+  await db.sessions.update(sessionId, { deload, deloadByWeek, updatedAt: now() })
+  if (deload) return
+
+  const session = await db.sessions.get(sessionId)
+  if (session) await spendUpcoming(session, await db.sets.where('sessionId').equals(sessionId).toArray())
+}
+
+export const setDeload = (sessionId: string, deload: boolean) => markDeload(sessionId, deload, false)
+
+export async function setWeekDeload(deload: boolean, reference = today()) {
+  const start = weekStart(reference)
+  const sheets = (await db.sessions.where('date').between(start, addDays(start, 7), true, false).toArray())
+    .filter((sheet) => !sheet.skipped)
+
+  for (const sheet of sheets) {
+    if (deload && !sheet.deload) await markDeload(sheet.id, true, true)
+    if (!deload && sheet.deload && sheet.deloadByWeek) await markDeload(sheet.id, false, false)
+  }
+}
+
 export async function sessionOn(date: string, routineId: string | null) {
   const sheets = await db.sessions.where('date').equals(date).toArray()
   return sheets.find((session) => session.routineId === routineId && !session.skipped) ?? null
@@ -344,6 +373,7 @@ const STALE_MS = 3 * 24 * 60 * 60 * 1000
 export async function discardIfBlank(sessionId: string) {
   const session = await db.sessions.get(sessionId)
   if (!session || session.skipped || session.later || session.edited || readDraft(sessionId)) return
+  if (Boolean(session.deload) !== Boolean(deloadMark(session.date).deload)) return
 
   const sets = await db.sets.where('sessionId').equals(sessionId).toArray()
   if (sets.some((set) => set.done)) return

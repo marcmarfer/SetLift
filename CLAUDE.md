@@ -56,7 +56,10 @@ Tables (`src/db/index.ts`); booleans are not indexed because IndexedDB cannot:
 - `sessions` — a dated sheet. **No open/closed state and no duration**: it is just a date, and the
   date is editable, which is what makes logging a past workout the same screen as logging today's.
   Until a sheet is `edited` (confirmed by hand) or has a done set, it follows its routine and is
-  rebuilt when the routine changes (`followRoutine`).
+  rebuilt when the routine changes (`followRoutine`). A `deload` sheet is logged like any other but
+  is left out of records, trends, the 1RM estimate, carried weights and the `upcoming` queue; the
+  profile's `deloadWeek` (a Monday) marks every sheet of that week and flags it `deloadByWeek`, so
+  clearing the week only undoes its own marks and leaves the sheets marked by hand.
 - `sets` — one row per set, written the moment you tick it. On bodyweight exercises `weight` is the
   total moved and `bodyweightKg` the body's share of it, so history keeps the weight you had that day.
   Targets and technique are copied onto each set, so history keeps what was planned.

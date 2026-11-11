@@ -17,6 +17,7 @@ export interface RoutineStatus {
   free: boolean
   freestyle: boolean
   later: boolean
+  deload: boolean
   count: number
   progress: SheetProgress | null
   sessionId: string | null
@@ -191,6 +192,7 @@ function statusOf(session: Session | null, progress: Record<string, SheetProgres
     skipped: session?.skipped === true,
     freestyle: session?.freestyle === true,
     later: session?.later === true && (sheet?.done ?? 0) === 0,
+    deload: session?.deload === true && !session.skipped,
     progress: sheet,
     sessionId: session?.id ?? null,
     lastDate: session?.date ?? null,

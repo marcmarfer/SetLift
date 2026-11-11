@@ -107,6 +107,7 @@ const sections = computed(() => {
     id: string
     date: string
     routine: string
+    deload: boolean
     sets: number
     exercises: string
   }>>()
@@ -130,6 +131,7 @@ const sections = computed(() => {
       id: session.id,
       date: session.date,
       routine: sheetName(session, session.routineId ? routineName.get(session.routineId) : null),
+      deload: session.deload === true,
       sets: sets.length,
       exercises: names.join(' · '),
     })
@@ -270,8 +272,11 @@ watch(
         >
           <div class="flex items-center gap-2">
             <span class="num w-[70px] text-[13px] text-sub">{{ shortDay(session.date) }}</span>
-            <span class="flex-grow text-[15px] font-semibold">{{ session.routine }}</span>
-            <span class="num text-[13px] text-muted">{{ session.sets }} series</span>
+            <span class="flex min-w-0 flex-grow items-center gap-2">
+              <span class="truncate text-[15px] font-semibold">{{ session.routine }}</span>
+              <span v-if="session.deload" class="flex h-5 shrink-0 items-center rounded-md bg-surface-2 px-1.5 text-[11px] font-semibold text-muted">Descarga</span>
+            </span>
+            <span class="num shrink-0 text-[13px] text-muted">{{ session.sets }} series</span>
           </div>
           <p class="truncate text-[11.5px] text-faint">{{ session.exercises }}</p>
         </RouterLink>

@@ -153,6 +153,7 @@ Deno.serve(async (request) => {
           date: session.date,
           routine: workoutName(session, routineNames),
           note: session.note || null,
+          deload: session.deload === true,
           done_sets: done.length,
           volume_kg: Math.round(done.reduce((total, set) =>
             set.weight == null || set.reps == null ? total : total + Number(set.weight) * set.reps, 0)),
@@ -182,6 +183,7 @@ Deno.serve(async (request) => {
       bodyweight_kg: profile?.bodyweight_kg != null ? Number(profile.bodyweight_kg) : null,
       notes: [
         'workouts are newest first; only workouts with at least one done set are listed',
+        'deload: true marks a deload workout; SetLift leaves it out of records, 1RM estimates and progression',
         'weight_kg on bodyweight exercises is the total moved; bodyweight_kg is the body share and added_load_kg the extra load (negative = assisted)',
         'target is what was planned for the set; effort (rir / rpe / failure) is a target, not logged',
         'gear values: chalk, belt, straps, wristWraps, kneeSleeves',

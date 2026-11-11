@@ -11,6 +11,7 @@ interface StoredSettings {
   name: string
   bodyweightKg: number
   avatar: string
+  deloadWeek: string
   onboarded: boolean
   updatedAt: number
   syncedAt: number
@@ -23,6 +24,7 @@ const defaults: StoredSettings = {
   name: '',
   bodyweightKg: 75,
   avatar: '',
+  deloadWeek: '',
   onboarded: false,
   updatedAt: 0,
   syncedAt: 0,
@@ -38,6 +40,8 @@ function load(): StoredSettings {
 }
 
 export const readBodyweightKg = () => load().bodyweightKg
+
+export const readDeloadWeek = () => load().deloadWeek
 
 export const initialsOf = (name: string) =>
   name
@@ -56,6 +60,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const name = ref(stored.name)
   const bodyweightKg = ref(stored.bodyweightKg)
   const avatar = ref(stored.avatar)
+  const deloadWeek = ref(stored.deloadWeek)
   const onboarded = ref(stored.onboarded)
   const updatedAt = ref(stored.updatedAt)
   const syncedAt = ref(stored.syncedAt)
@@ -69,6 +74,7 @@ export const useSettingsStore = defineStore('settings', () => {
     name: name.value,
     bodyweightKg: bodyweightKg.value,
     avatar: avatar.value,
+    deloadWeek: deloadWeek.value,
     onboarded: onboarded.value,
     updatedAt: updatedAt.value,
     syncedAt: syncedAt.value,
@@ -80,7 +86,7 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {}
   }
 
-  watch([units, defaultRestSec, sound, name, bodyweightKg, avatar, onboarded], () => {
+  watch([units, defaultRestSec, sound, name, bodyweightKg, avatar, deloadWeek, onboarded], () => {
     if (!applyingRemote) updatedAt.value = Date.now()
     cache()
   }, { deep: true, flush: 'sync' })
@@ -100,6 +106,7 @@ export const useSettingsStore = defineStore('settings', () => {
       name.value = (row.name as string) ?? name.value
       bodyweightKg.value = (row.bodyweight_kg as number) ?? bodyweightKg.value
       avatar.value = (row.avatar as string) ?? ''
+      deloadWeek.value = (row.deload_week as string) ?? ''
       updatedAt.value = Date.parse(String(row.updated_at ?? 0)) || 0
       syncedAt.value = updatedAt.value
     })
@@ -163,6 +170,7 @@ export const useSettingsStore = defineStore('settings', () => {
         name: name.value,
         bodyweight_kg: bodyweightKg.value,
         avatar: avatar.value || null,
+        deload_week: deloadWeek.value || null,
         ...(onboarded.value ? { onboarded_at: new Date(updatedAt.value).toISOString() } : {}),
         updated_at: new Date(updatedAt.value).toISOString(),
       },
@@ -184,6 +192,7 @@ export const useSettingsStore = defineStore('settings', () => {
       name.value = defaults.name
       bodyweightKg.value = defaults.bodyweightKg
       avatar.value = defaults.avatar
+      deloadWeek.value = defaults.deloadWeek
       onboarded.value = defaults.onboarded
       updatedAt.value = defaults.updatedAt
       syncedAt.value = defaults.syncedAt
@@ -208,6 +217,7 @@ export const useSettingsStore = defineStore('settings', () => {
     name,
     bodyweightKg,
     avatar,
+    deloadWeek,
     onboarded,
     updatedAt,
     initials,

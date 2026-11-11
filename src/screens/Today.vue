@@ -12,8 +12,9 @@ import SwitchPlanSheet from '../components/SwitchPlanSheet.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LogSheet, { type LoggedSheet } from '../components/LogSheet.vue'
 import { nextExercises, unplanned } from '../lib/upcoming'
-import { markLater, openFreeWorkout, openFreestyleWorkout, openWorkout, removeSession, sheetName, skipRoutine } from '../lib/session'
+import { markLater, openFreeWorkout, openFreestyleWorkout, openWorkout, removeSession, setWeekDeload, sheetName, skipRoutine } from '../lib/session'
 import { forgetDraft } from '../lib/draft'
+import { useSettingsStore } from '../stores/settings'
 import { useUndoStore } from '../stores/undo'
 import type { Exercise, Plan, Routine, Session, SetEntry } from '../types'
 
@@ -424,6 +425,15 @@ async function logPast({ date, routineId }: { date: string; routineId: string | 
   router.push(`/workout/${id}`)
 }
 
+const settings = useSettingsStore()
+const deloadWeek = computed(() => settings.deloadWeek === weekStart())
+
+async function toggleDeloadWeek() {
+  const deload = !deloadWeek.value
+  settings.deloadWeek = deload ? weekStart() : ''
+  await setWeekDeload(deload)
+}
+
 async function startFreeWorkout() {
   const id = await openFreeWorkout()
   router.push(`/workout/${id}`)
@@ -619,6 +629,7 @@ const freeWeek = computed(() => {
         total: sheet.total,
         finished: sheet.total > 0 && sheet.done === sheet.total,
         started: sheet.done > 0 && sheet.done < sheet.total,
+        deload: session.deload === true,
       }]
     })
 })
@@ -893,6 +904,10 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           <span class="flex-grow text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             {{ stripTitle }}
           </span>
+          <span
+            v-if="deloadWeek && !back"
+            class="flex h-5 items-center rounded-md bg-accent-soft px-1.5 text-[11px] font-semibold text-accent-ink"
+          >Descarga</span>
           <span class="num text-[13px] text-muted">{{ doneThisWeek }} de {{ planned.length }}</span>
           <button
             v-if="hasPrevious || back"
@@ -967,6 +982,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
             <span v-if="item.lastDate || item.due" class="num text-[10px] text-dim">
               {{ tinyDay(item.lastDate ?? today()) }}
             </span>
+            <span v-if="item.deload" class="text-[10px] font-medium text-accent-ink">descarga</span>
             <span v-if="item.later" class="text-[10px] font-medium text-accent-ink">a rellenar</span>
             <span v-else-if="item.skipped" class="text-[10px] font-medium" :class="canUndoSkip(item) ? 'text-accent-ink' : 'text-dim'">
               {{ canUndoSkip(item) ? 'saltada · deshacer' : 'saltada' }}
@@ -1026,6 +1042,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
             <span class="num text-[10px]" :class="sheet.started ? 'font-semibold text-accent-ink' : 'text-dim'">
               {{ sheet.total ? `${sheet.done}/${sheet.total} extra` : 'extra' }}
             </span>
+            <span v-if="sheet.deload" class="text-[10px] font-medium text-accent-ink">descarga</span>
           </RouterLink>
         </ul>
       </section>
@@ -1066,6 +1083,16 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6-7 6M14 6v12" /></svg>
           {{ rotation ? `Saltar ${skipTarget.name} y pasar a la siguiente` : `Saltar ${skipTarget.name} esta semana` }}
+        </button>
+        <button
+          class="flex h-12 items-center gap-2.5 border-t border-line text-sm"
+          :class="deloadWeek ? 'text-accent-ink' : 'text-muted'"
+          type="button"
+          :aria-pressed="deloadWeek"
+          @click="toggleDeloadWeek"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+          {{ deloadWeek ? 'Quitar la descarga de esta semana' : 'Esta semana es de descarga' }}
         </button>
       </section>
 

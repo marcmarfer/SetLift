@@ -64,6 +64,8 @@ function best(sets: SetEntry[]) {
   )
 }
 
+const deload = computed(() => data.value.session?.deload === true)
+
 const lines = computed(() => {
   const current = data.value
   const ids = [...new Set(current.sets.map((set) => set.exerciseId))]
@@ -77,7 +79,7 @@ const lines = computed(() => {
     const beforeScore = estimateOneRepMax(bestBefore?.weight ?? 0, bestBefore?.reps ?? 0)
 
     let delta = ''
-    if (bestBefore && bestNow) {
+    if (bestBefore && bestNow && !deload.value) {
       if ((bestNow.weight ?? 0) > (bestBefore.weight ?? 0)) {
         delta = `↑ +${format((bestNow.weight ?? 0) - (bestBefore.weight ?? 0))} kg`
       } else if ((bestNow.reps ?? 0) > (bestBefore.reps ?? 0)) {
@@ -94,7 +96,7 @@ const lines = computed(() => {
       name: nameOf(id),
       best: bestNow,
       delta,
-      isRecord: nowScore > (current.records[id] ?? 0) && (current.records[id] ?? 0) > 0,
+      isRecord: !deload.value && nowScore > (current.records[id] ?? 0) && (current.records[id] ?? 0) > 0,
     }
   })
 })
@@ -119,7 +121,7 @@ function loadLabel(set: SetEntry, weight: number) {
 
 const nextTime = computed(() => {
   const routine = data.value.routine
-  if (!routine) return []
+  if (!routine || deload.value) return []
 
   return routine.exercises.flatMap((item) => {
     const mine = data.value.sheet.filter((set) => set.exerciseId === item.exerciseId)
@@ -156,7 +158,7 @@ const nextTime = computed(() => {
 
 const weightChanges = computed(() => {
   const routine = data.value.routine
-  if (!routine) return []
+  if (!routine || deload.value) return []
 
   return routine.exercises.flatMap((item) => {
     if (bySession(item)) return []
@@ -199,7 +201,10 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
       </button>
       <div class="flex min-w-0 flex-col gap-1">
-        <h1 class="text-[22px] font-bold tracking-[-0.02em]">Resumen</h1>
+        <div class="flex items-center gap-2">
+          <h1 class="text-[22px] font-bold tracking-[-0.02em]">Resumen</h1>
+          <span v-if="deload" class="flex h-[22px] shrink-0 items-center rounded-lg border border-line-btn bg-surface px-2 text-[11.5px] font-semibold text-muted">Descarga</span>
+        </div>
         <p class="truncate text-[13px] text-muted">{{ sheetName(data.session, data.routine?.name) }} · {{ longDay(data.session.date) }}</p>
       </div>
     </header>
@@ -236,7 +241,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
       </section>
 
       <section class="flex flex-col rounded-[18px] border border-line bg-surface px-3.5 py-3 shadow-card">
-        <span class="pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint">Frente a la última vez</span>
+        <span class="pb-1.5 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint">{{ deload ? 'Mejor serie' : 'Frente a la última vez' }}</span>
         <div
           v-for="(line, index) in lines"
           :key="line.id"
@@ -246,6 +251,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           <span class="flex-grow truncate text-sm">{{ line.name }}</span>
           <span class="num text-[13px] text-muted">{{ format(line.best?.weight ?? 0) }} × {{ line.best?.reps }}</span>
           <span
+            v-if="!deload"
             class="num w-[62px] text-right text-[13px] font-semibold"
             :class="line.delta.startsWith('↑') ? 'text-accent' : line.delta === '=' ? 'text-dim' : 'text-down'"
           >{{ line.delta }}</span>

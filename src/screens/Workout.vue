@@ -7,7 +7,7 @@ import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
 import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
-import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, sheetName } from '../lib/session'
+import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
@@ -342,6 +342,11 @@ watch(sessionId, () => { unsaved.value = { previous: {}, records: {} } })
 const previousOf = (id: string) => data.value.previous[id] ?? unsaved.value.previous[id] ?? []
 const recordOf = (id: string) => data.value.records[id] ?? unsaved.value.records[id] ?? 0
 
+async function toggleDeload() {
+  const session = data.value.session
+  if (session) await setDeload(session.id, !session.deload)
+}
+
 async function renameSheet(value: string) {
   const session = data.value.session
   if (!session) return
@@ -368,7 +373,7 @@ const groups = computed(() => {
       const sets = [...list].sort((a, b) => a.index - b.index)
       const exerciseId = sets[0].exerciseId
       const template = current.blueprint[slot]
-      const best = recordOf(exerciseId)
+      const best = current.session?.deload ? 0 : recordOf(exerciseId)
       const recordIds = new Set(
         sets
           .filter((set) => set.done && set.reps != null && best > 0 && estimateOneRepMax(set.weight ?? 0, set.reps) > best)
@@ -884,6 +889,32 @@ async function removeSheet() {
     </header>
 
     <div class="flex flex-grow flex-col gap-2 overflow-y-auto px-4 py-2.5" @click="editing = null">
+      <div v-if="!readonly || data.session.deload" class="flex shrink-0 items-center gap-2">
+        <span
+          v-if="readonly"
+          class="flex h-8 items-center rounded-full bg-accent-soft px-3 text-[12.5px] font-semibold text-accent-ink"
+        >Descarga</span>
+        <button
+          v-else-if="data.session.deload"
+          class="flex h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-[12.5px] font-semibold text-accent-ink"
+          type="button"
+          aria-label="Quitar la marca de descarga"
+          @click.stop="toggleDeload"
+        >
+          Descarga
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        <button
+          v-else
+          class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+          type="button"
+          @click.stop="toggleDeload"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          Descarga
+        </button>
+        <span v-if="data.session.deload" class="min-w-0 truncate text-[11.5px] text-dim">no cuenta para récords ni progresión</span>
+      </div>
       <draggable
         v-model="ordered"
         item-key="slot"
