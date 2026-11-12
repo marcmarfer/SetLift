@@ -1,4 +1,4 @@
-import type { Plan, Routine, Session } from '../types'
+import type { Exercise, Plan, Routine, Session } from '../types'
 import { addDays, sameWeek, today, weekStart } from './dates'
 
 export interface SheetProgress {
@@ -258,10 +258,12 @@ export function planRotation(
 }
 
 export function sessionVolume(
-  sets: Array<{ weight: number | null; reps: number | null; done: boolean }>,
+  sets: Array<{ exerciseId: string; weight: number | null; reps: number | null; done: boolean }>,
+  exercises: Array<Pick<Exercise, 'id' | 'timed'>>,
 ): number {
+  const timed = new Set(exercises.filter((exercise) => exercise.timed).map((exercise) => exercise.id))
   return sets.reduce((total, set) => {
-    if (!set.done || set.weight == null || set.reps == null) return total
+    if (!set.done || set.weight == null || set.reps == null || timed.has(set.exerciseId)) return total
     return total + set.weight * set.reps
   }, 0)
 }

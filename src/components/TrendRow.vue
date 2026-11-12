@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import type { ExerciseTrend } from '../lib/progress'
+import type { ExerciseTrend, TrendUnit } from '../lib/progress'
 
 defineProps<{ trend: ExerciseTrend }>()
 
 const weightLabel = (weight: number) => (weight === 0 ? 'BW' : `${weight} kg`)
 
-const changeLabel = (change: number, unit: 'percent' | 'reps') => {
+const changeLabel = (change: number, unit: TrendUnit) => {
   if (change === 0) return '='
   const sign = change > 0 ? '↑ +' : '↓ −'
   const value = Math.abs(change)
-  return unit === 'reps' ? `${sign}${value} reps` : `${sign}${value.toFixed(value < 10 ? 1 : 0)}%`
+  if (unit === 'reps') return `${sign}${value} reps`
+  if (unit === 'seconds') return `${sign}${value} s`
+  return `${sign}${value.toFixed(value < 10 ? 1 : 0)}%`
 }
 </script>
 
@@ -21,7 +23,7 @@ const changeLabel = (change: number, unit: 'percent' | 'reps') => {
     <div class="flex flex-grow flex-col gap-0.5">
       <span class="text-[15px] font-semibold">{{ trend.exercise.name }}</span>
       <span class="num text-[12.5px] text-sub">
-        {{ weightLabel(trend.best.weight) }} × {{ trend.best.reps }}
+        {{ weightLabel(trend.best.weight) }} × {{ trend.best.reps }}{{ trend.exercise.timed ? ' s' : '' }}
       </span>
     </div>
     <span

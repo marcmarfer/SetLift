@@ -72,7 +72,7 @@ const muscleGroups = computed(() =>
 
 function score(trend: ExerciseTrend) {
   if (!trend.previous) return 0
-  if (trend.unit !== 'reps') return trend.change
+  if (trend.unit === 'percent') return trend.change
   return trend.previous.reps > 0 ? ((trend.best.reps - trend.previous.reps) / trend.previous.reps) * 100 : 0
 }
 

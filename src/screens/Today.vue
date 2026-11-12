@@ -97,7 +97,7 @@ const data = useLive<TodayData>(
           ),
           sets: doneSets.length,
           total: trained.sets.length,
-          volume: Math.round(sessionVolume(doneSets)),
+          volume: Math.round(sessionVolume(doneSets, exercises)),
           at: Math.max(lastMark(trained.sets), trained.session.updatedAt),
         }
       : null
@@ -156,7 +156,7 @@ const weekLater = computed(() => currentWeek.value.filter((item) => item.later).
 
 const weekTotals = computed(() => ({
   sets: data.value.weekSets.length,
-  volume: Math.round(sessionVolume(data.value.weekSets)),
+  volume: Math.round(sessionVolume(data.value.weekSets, data.value.exercises)),
 }))
 
 const choosingPlan = ref(false)
@@ -528,7 +528,7 @@ const lastSummary = computed(() => {
   return {
     when: timeAgo(current.lastSession.date),
     sets: done.length,
-    volume: Math.round(sessionVolume(done)),
+    volume: Math.round(sessionVolume(done, current.exercises)),
   }
 })
 

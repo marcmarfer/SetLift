@@ -31,6 +31,28 @@ export const RANGE_PRESETS: Array<[number, number]> = [
   [12, 15],
 ]
 
+export const TIMED_RANGE_PRESETS: Array<[number, number]> = [
+  [20, 30],
+  [30, 45],
+  [45, 60],
+]
+
+export const repsModesFor = (timed = false) =>
+  timed
+    ? REPS_MODES.filter((mode) => mode.value !== 'single').map((mode) =>
+        mode.value === 'amrap' ? { ...mode, label: 'Máximo' } : mode,
+      )
+    : REPS_MODES
+
+export const rangePresetsFor = (timed = false) => (timed ? TIMED_RANGE_PRESETS : RANGE_PRESETS)
+
+export const startingTemplates = (timed = false): SetTemplate[] => {
+  const [repsMin, repsMax] = timed ? [30, 45] : [8, 12]
+  return Array.from({ length: 3 }, () => ({ type: 'range', repsMin, repsMax, weight: 0 }))
+}
+
+export const countLabel = (count: number, timed: boolean) => (timed ? `${count} s` : String(count))
+
 export const RIR_PRESETS: Array<[number, number]> = [
   [0, 0],
   [1, 1],
@@ -96,12 +118,12 @@ export function rirLabel(target: Pick<Target, 'rirMin' | 'rirMax'>) {
   return min === max ? `RIR ${min}` : `RIR ${min}–${max}`
 }
 
-export function repsLabel(target: Target) {
+export function repsLabel(target: Target, timed = false) {
   const reps = repsOf(target)
-  if (reps === 'amrap') return 'AMRAP'
+  if (reps === 'amrap') return timed ? 'Máx.' : 'AMRAP'
   if (reps === 'single') return 'Single'
-  if (reps === 'fixed') return String(target.reps ?? '')
-  return `${target.repsMin ?? 0}–${target.repsMax ?? 0}`
+  if (reps === 'fixed') return target.reps == null ? '' : countLabel(target.reps, timed)
+  return `${target.repsMin ?? 0}–${target.repsMax ?? 0}${timed ? ' s' : ''}`
 }
 
 export function effortLabel(target: Target) {
@@ -112,10 +134,11 @@ export function effortLabel(target: Target) {
   return ''
 }
 
-export function shortLabel(target: Target) {
+export function shortLabel(target: Target, timed = false) {
   const effort = effortLabel(target)
-  if (!effort) return repsLabel(target)
-  return effortOf(target) === 'rpe' ? `${repsLabel(target)} ${effort}` : `${repsLabel(target)} · ${effort}`
+  const reps = repsLabel(target, timed)
+  if (!effort) return reps
+  return effortOf(target) === 'rpe' ? `${reps} ${effort}` : `${reps} · ${effort}`
 }
 
 export function minReps(target: Target) {
