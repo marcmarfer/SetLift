@@ -13,7 +13,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
 import GearSheet from '../components/GearSheet.vue'
 import { gearLabel, gearVaries, sharedGear, storedGear } from '../lib/gear'
-import { effortLabel, repsLabel, shortLabel } from '../lib/targets'
+import { effortLabel, repsLabel, shortLabel, startingTemplates } from '../lib/targets'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { bySession, dropPlan, findPlan, openPlans, preparePlan, setPlanning } from '../lib/upcoming'
@@ -140,6 +140,8 @@ const nameOf = (id: string) => data.value.exercises.find((exercise) => exercise.
 const isBodyweight = (id: string) =>
   data.value.exercises.find((exercise) => exercise.id === id)?.bodyweight ?? false
 
+const isTimed = (id: string) => Boolean(data.value.exercises.find((exercise) => exercise.id === id)?.timed)
+
 const totalSets = computed(() => items.value.reduce((count, item) => count + item.sets.length, 0))
 
 async function save(exercises: RoutineExercise[]) {
@@ -213,6 +215,9 @@ const swapAlternatives = computed(() => {
 
 const withoutWeights = (sets: SetTemplate[]) => sets.map((set) => ({ ...set, weight: 0 }))
 
+const retimed = (sets: SetTemplate[], timed: boolean) =>
+  sets.map((set) => ({ ...startingTemplates(timed)[0], weight: set.weight, gear: set.gear }))
+
 async function swapExercise(exerciseId: string, picked?: Exercise) {
   const index = swapIndex.value
   const item = index === null ? undefined : items.value[index]
@@ -221,9 +226,17 @@ async function swapExercise(exerciseId: string, picked?: Exercise) {
 
   const exercise = picked ?? data.value.exercises.find((candidate) => candidate.id === exerciseId)
   const bodyweight = Boolean(exercise?.bodyweight)
+  const timed = Boolean(exercise?.timed)
+  const source = timed === isTimed(item.exerciseId)
+    ? item
+    : {
+        ...item,
+        sets: retimed(item.sets, timed),
+        ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: retimed(plan.sets, timed) })) } : {}),
+      }
 
   if (bodyweight === isBodyweight(item.exerciseId)) {
-    await replace(index, { exerciseId })
+    await replace(index, { exerciseId, sets: source.sets, ...(source.upcoming ? { upcoming: source.upcoming } : {}) })
     return
   }
 
@@ -238,8 +251,8 @@ async function swapExercise(exerciseId: string, picked?: Exercise) {
       confirmingSwap.value = null
       await replace(index, {
         exerciseId,
-        sets: withoutWeights(item.sets),
-        ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: withoutWeights(plan.sets) })) } : {}),
+        sets: withoutWeights(source.sets),
+        ...(source.upcoming ? { upcoming: source.upcoming.map((plan) => ({ ...plan, sets: withoutWeights(plan.sets) })) } : {}),
       })
     },
   }
@@ -303,7 +316,7 @@ const editingTarget = computed(() => {
   const item = items.value[spot.index]
   const template = item?.sets[spot.position]
   if (!item || !template) return null
-  return { spot, template, count: item.sets.length, name: nameOf(item.exerciseId) }
+  return { spot, template, count: item.sets.length, name: nameOf(item.exerciseId), timed: isTimed(item.exerciseId) }
 })
 
 function applyTarget(changes: Partial<SetTemplate>, all: boolean) {
@@ -428,11 +441,7 @@ function toggleRest(index: number) {
 async function addExercise(exerciseId: string) {
   const exercises = [...items.value, {
     exerciseId,
-    sets: [
-      { type: 'range' as SetType, repsMin: 8, repsMax: 12, weight: 0 },
-      { type: 'range' as SetType, repsMin: 8, repsMax: 12, weight: 0 },
-      { type: 'range' as SetType, repsMin: 8, repsMax: 12, weight: 0 },
-    ],
+    sets: startingTemplates(isTimed(exerciseId)),
     restSec: null,
     incrementKg: 2.5,
   }]
@@ -443,7 +452,7 @@ async function addExercise(exerciseId: string) {
 }
 
 function summary(item: RoutineExercise) {
-  const labels = new Set(item.sets.map(shortLabel))
+  const labels = new Set(item.sets.map((template) => shortLabel(template, isTimed(item.exerciseId))))
   const kind = labels.size === 1 ? [...labels][0] : 'mixta'
   return `${item.sets.length} × ${kind}${weightSummary(item)}`
 }
@@ -606,7 +615,7 @@ function restLabel(item: RoutineExercise) {
                   >
                     <span class="num text-[10px] text-dim">S{{ position + 1 }}</span>
                     <span class="num text-[12.5px] font-semibold text-accent-ink">
-                      {{ repsLabel(template) }}
+                      {{ repsLabel(template, isTimed(item.exerciseId)) }}
                     </span>
                     <span v-if="effortLabel(template)" class="num text-[10.5px] font-semibold text-accent-ink">
                       {{ effortLabel(template) }}
@@ -843,6 +852,7 @@ function restLabel(item: RoutineExercise) {
       :position="editingTarget.spot.position"
       :count="editingTarget.count"
       :exercise-name="editingTarget.name"
+      :timed="editingTarget.timed"
       @apply="applyTarget"
       @close="targetEditor = null"
     />
@@ -891,7 +901,7 @@ function restLabel(item: RoutineExercise) {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="groups"
-      :draft="{ name: creating, group: '', bodyweight: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

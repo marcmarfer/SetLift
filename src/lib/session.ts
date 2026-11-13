@@ -2,7 +2,7 @@ import { db, newId } from '../db'
 import { addDays, sameWeek, today, weekStart } from './dates'
 import { estimateOneRepMax, progression } from './progress'
 import { forgetDraft, readDraft } from './draft'
-import { entryTarget } from './targets'
+import { entryTarget, startingTemplates } from './targets'
 import { normalGear, storedGear } from './gear'
 import { startingWeight } from './bodyweight'
 import { readBodyweightKg, readDeloadWeek } from '../stores/settings'
@@ -256,7 +256,7 @@ export async function exerciseEntries(sessionId: string, exerciseId: string, slo
         effort: set.targetEffort,
         weight: set.weight ?? 0,
       }))
-    : Array.from({ length: 3 }, () => ({ type: 'range' as const, repsMin: 8, repsMax: 12, weight: 0 }))
+    : startingTemplates(Boolean((await db.exercises.get(exerciseId))?.timed))
 
   return templates.map((template, position) =>
     entryFrom(

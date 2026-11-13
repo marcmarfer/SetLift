@@ -40,7 +40,8 @@ Tables (`src/db/index.ts`); booleans are not indexed because IndexedDB cannot:
 - `exerciseFamilies` — groups the variants of one movement ("Press inclinado"). Catalogue only.
 - `exercises` — mixed: no `ownerId` means catalogue (seeded on the server, read-only in the app),
   with `ownerId` it is the user's own. A variant has `familyId` and a short `variant` label.
-  `bodyweight` exercises chart reps, not kilos.
+  `bodyweight` exercises chart reps, not kilos. `timed` exercises (plank, holds) keep seconds in the
+  set's `reps` and read their reps targets as seconds; they stay out of the 1RM, records and volume.
 - `exercisePreferences` — favourite and manual 1RM, per exercise id: the catalogue row can't hold
   them because it is not writable.
 - `routines` — an ordered list of exercises, each with its set templates, rest, weight increment

@@ -52,8 +52,10 @@ export interface ExerciseTrend {
   best: BestSet
   previous: BestSet | null
   change: number
-  unit: 'percent' | 'reps'
+  unit: TrendUnit
 }
+
+export type TrendUnit = 'percent' | 'reps' | 'seconds'
 
 function bestOf(sets: SetEntry[], date: string, sessionId: string): BestSet | null {
   const done = sets.filter((set) => set.done && set.reps != null)
@@ -108,11 +110,11 @@ export function trends(
     if (!best) continue
 
     const previous = sorted[1] ? bestOf(sorted[1].list, sorted[1].date, sorted[1].sessionId) : null
-    const unit: ExerciseTrend['unit'] = exercise.bodyweight ? 'reps' : 'percent'
+    const unit: TrendUnit = exercise.timed ? 'seconds' : exercise.bodyweight ? 'reps' : 'percent'
 
     let change = 0
     if (previous) {
-      if (unit === 'reps') {
+      if (unit !== 'percent') {
         change = best.reps - previous.reps
       } else {
         const before = estimateOneRepMax(previous.weight, previous.reps)

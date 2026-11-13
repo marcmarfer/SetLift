@@ -3,12 +3,12 @@ import { computed, ref, watch } from 'vue'
 import { useSheetDrag } from '../composables/useSheetDrag'
 import {
   EFFORT_MODES,
-  RANGE_PRESETS,
-  REPS_MODES,
   RIR_PRESETS,
   RPE_STEPS,
   allowsEffort,
   effortOf,
+  rangePresetsFor,
+  repsModesFor,
   repsOf,
   shortLabel,
 } from '../lib/targets'
@@ -21,6 +21,7 @@ const props = defineProps<{
   exerciseName: string
   subtitle?: string
   sets?: SetTemplate[]
+  timed?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,18 +34,25 @@ const chosen = ref<number | 'all'>(props.position)
 const panel = ref<HTMLElement | null>(null)
 const drag = useSheetDrag(panel, () => emit('close'))
 
+const repsModes = repsModesFor(props.timed)
+const rangePresets = rangePresetsFor(props.timed)
+const step = props.timed ? 5 : 1
+const ceiling = props.timed ? 600 : 50
+const defaults = props.timed ? { fixed: 30, min: 30, max: 45 } : { fixed: 5, min: 8, max: 12 }
+const unit = props.timed ? ' s' : ''
+
 const reps = ref<RepsTarget>(repsOf(props.template))
 const effort = ref<EffortTarget | null>(effortOf(props.template))
 
-const fixedReps = ref(props.template.reps ?? 5)
-const repsMin = ref(props.template.repsMin ?? 8)
-const repsMax = ref(props.template.repsMax ?? 12)
+const fixedReps = ref(props.template.reps ?? defaults.fixed)
+const repsMin = ref(props.template.repsMin ?? defaults.min)
+const repsMax = ref(props.template.repsMax ?? defaults.max)
 const rirMin = ref(props.template.rirMin ?? 1)
 const rirMax = ref(props.template.rirMax ?? props.template.rirMin ?? 2)
 const rpe = ref(props.template.rpe ?? 8)
 
 const customRange = ref(
-  reps.value === 'range' && !RANGE_PRESETS.some(([min, max]) => min === repsMin.value && max === repsMax.value),
+  reps.value === 'range' && !rangePresets.some(([min, max]) => min === repsMin.value && max === repsMax.value),
 )
 const customRir = ref(
   effort.value === 'rir' && !RIR_PRESETS.some(([min, max]) => min === rirMin.value && max === rirMax.value),
@@ -53,14 +61,14 @@ const customRir = ref(
 function load(template: SetTemplate) {
   reps.value = repsOf(template)
   effort.value = effortOf(template)
-  fixedReps.value = template.reps ?? 5
-  repsMin.value = template.repsMin ?? 8
-  repsMax.value = template.repsMax ?? 12
+  fixedReps.value = template.reps ?? defaults.fixed
+  repsMin.value = template.repsMin ?? defaults.min
+  repsMax.value = template.repsMax ?? defaults.max
   rirMin.value = template.rirMin ?? 1
   rirMax.value = template.rirMax ?? template.rirMin ?? 2
   rpe.value = template.rpe ?? 8
   customRange.value =
-    reps.value === 'range' && !RANGE_PRESETS.some(([min, max]) => min === repsMin.value && max === repsMax.value)
+    reps.value === 'range' && !rangePresets.some(([min, max]) => min === repsMin.value && max === repsMax.value)
   customRir.value =
     effort.value === 'rir' && !RIR_PRESETS.some(([min, max]) => min === rirMin.value && max === rirMax.value)
 }
@@ -78,7 +86,7 @@ watch(reps, (value) => {
 })
 
 const activeRange = computed(() =>
-  customRange.value ? null : RANGE_PRESETS.findIndex(([min, max]) => min === repsMin.value && max === repsMax.value),
+  customRange.value ? null : rangePresets.findIndex(([min, max]) => min === repsMin.value && max === repsMax.value),
 )
 const activeRir = computed(() =>
   customRir.value ? null : RIR_PRESETS.findIndex(([min, max]) => min === rirMin.value && max === rirMax.value),
@@ -98,17 +106,17 @@ function pickRir([min, max]: [number, number]) {
   customRir.value = false
 }
 
-function shiftFixed(step: number) {
-  fixedReps.value = bound(fixedReps.value + step, 1, 50)
+function shiftFixed(direction: number) {
+  fixedReps.value = bound(fixedReps.value + direction * step, step, ceiling)
 }
 
-function shiftRepsMin(step: number) {
-  repsMin.value = bound(repsMin.value + step, 1, 50)
+function shiftRepsMin(direction: number) {
+  repsMin.value = bound(repsMin.value + direction * step, step, ceiling)
   if (repsMax.value < repsMin.value) repsMax.value = repsMin.value
 }
 
-function shiftRepsMax(step: number) {
-  repsMax.value = bound(repsMax.value + step, 1, 50)
+function shiftRepsMax(direction: number) {
+  repsMax.value = bound(repsMax.value + direction * step, step, ceiling)
   if (repsMin.value > repsMax.value) repsMin.value = repsMax.value
 }
 
@@ -133,7 +141,7 @@ const changes = computed<Partial<SetTemplate>>(() => ({
   rirMax: effort.value === 'rir' ? rirMax.value : undefined,
 }))
 
-const preview = computed(() => shortLabel({ ...props.template, ...changes.value }))
+const preview = computed(() => shortLabel({ ...props.template, ...changes.value }, props.timed))
 </script>
 
 <template>
@@ -173,10 +181,10 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
       </div>
 
       <div class="flex flex-col gap-2">
-        <span class="text-[13px] text-muted">Repeticiones</span>
-        <div class="grid grid-cols-4 gap-1.5">
+        <span class="text-[13px] text-muted">{{ timed ? 'Tiempo' : 'Repeticiones' }}</span>
+        <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${repsModes.length}, minmax(0, 1fr))` }">
           <button
-            v-for="option in REPS_MODES"
+            v-for="option in repsModes"
             :key="option.value"
             class="flex h-11 items-center justify-center rounded-xl border text-[12.5px] font-semibold"
             :class="reps === option.value ? 'border-accent bg-accent text-hero-ink' : 'border-line-btn bg-surface-2 text-muted'"
@@ -188,13 +196,13 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         <template v-if="reps === 'range'">
           <div class="grid grid-cols-4 gap-1.5">
             <button
-              v-for="(preset, spot) in RANGE_PRESETS"
+              v-for="(preset, spot) in rangePresets"
               :key="preset.join('-')"
               class="num flex h-11 items-center justify-center rounded-xl border text-[14px] font-semibold"
               :class="activeRange === spot ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2'"
               type="button"
               @click="pickRange(preset)"
-            >{{ preset[0] }}–{{ preset[1] }}</button>
+            >{{ preset[0] }}–{{ preset[1] }}{{ unit }}</button>
             <button
               class="flex h-11 items-center justify-center rounded-xl border text-[13px] font-semibold"
               :class="customRange ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2 text-muted'"
@@ -209,7 +217,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMin(-1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
               </button>
-              <span class="num w-8 text-center text-[17px] font-bold">{{ repsMin }}</span>
+              <span class="num w-12 text-center text-[17px] font-bold">{{ repsMin }}{{ unit }}</span>
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMin(1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
               </button>
@@ -219,7 +227,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMax(-1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
               </button>
-              <span class="num w-8 text-center text-[17px] font-bold">{{ repsMax }}</span>
+              <span class="num w-12 text-center text-[17px] font-bold">{{ repsMax }}{{ unit }}</span>
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMax(1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
               </button>
@@ -228,11 +236,11 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         </template>
 
         <div v-else-if="reps === 'fixed'" class="flex items-center gap-2.5 rounded-2xl border border-line bg-app p-3">
-          <span class="flex-grow text-[13px] text-muted">Repeticiones</span>
+          <span class="flex-grow text-[13px] text-muted">{{ timed ? 'Segundos' : 'Repeticiones' }}</span>
           <button class="flex h-11 w-11 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftFixed(-1)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
           </button>
-          <span class="num w-10 text-center text-xl font-bold">{{ fixedReps }}</span>
+          <span class="num w-14 text-center text-xl font-bold">{{ fixedReps }}{{ unit }}</span>
           <button class="flex h-11 w-11 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftFixed(1)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>

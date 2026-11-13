@@ -65,7 +65,8 @@ const data = useLive<DetailData>(
   exerciseId,
 )
 
-const bodyweight = computed(() => data.value.exercise?.bodyweight ?? false)
+const timed = computed(() => Boolean(data.value.exercise?.timed))
+const byCount = computed(() => timed.value || (data.value.exercise?.bodyweight ?? false))
 
 const auth = useAuthStore()
 const mine = computed(() => isMine(data.value.exercise, auth.userId))
@@ -159,7 +160,7 @@ const points = computed(() => {
   for (const set of current.sets) {
     const date = dateOf.value.get(set.sessionId)
     if (!date || date < limit) continue
-    const score = bodyweight.value ? (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+    const score = byCount.value ? (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
     byDate.set(date, Math.max(byDate.get(date) ?? 0, score))
   }
 
@@ -299,9 +300,9 @@ const format = (value: number) => String(value).replace('.', ',')
     </header>
 
     <div class="flex flex-grow flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
-      <section v-if="current || !bodyweight" class="flex items-start gap-3">
+      <section v-if="current || !byCount" class="flex items-start gap-3">
         <button
-          v-if="!bodyweight"
+          v-if="!byCount"
           class="flex min-w-0 flex-1 flex-col items-start gap-1 text-left"
           type="button"
           :aria-label="realOneRepMax ? 'Editar el 1RM real' : 'Añadir un 1RM real'"
@@ -334,11 +335,11 @@ const format = (value: number) => String(value).replace('.', ',')
 
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-            {{ bodyweight ? 'Mejor serie' : '1RM estimado' }}
+            {{ byCount ? 'Mejor serie' : '1RM estimado' }}
           </span>
           <div class="flex items-baseline gap-1.5">
             <span class="num text-[38px] font-bold leading-none tracking-[-0.02em]">{{ current ? current.value : '—' }}</span>
-            <span v-if="current" class="text-[15px] text-dim">{{ bodyweight ? 'reps' : 'kg' }}</span>
+            <span v-if="current" class="text-[15px] text-dim">{{ timed ? 's' : byCount ? 'reps' : 'kg' }}</span>
           </div>
           <span
             v-if="current"
@@ -398,7 +399,7 @@ const format = (value: number) => String(value).replace('.', ',')
         <span v-if="!mine" class="text-[11.5px] text-faint">El catálogo no se edita</span>
       </button>
 
-      <section class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
+      <section v-if="!timed" class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
         <span class="flex h-[38px] items-center text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Récords por repeticiones · histórico
         </span>
@@ -422,7 +423,7 @@ const format = (value: number) => String(value).replace('.', ',')
       v-if="editing && data.exercise"
       title="Editar ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight }"
+      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight, timed: Boolean(data.exercise.timed) }"
       :usage="usage"
       @save="saveExercise"
       @remove="askRemoval"

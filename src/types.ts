@@ -38,6 +38,7 @@ export interface Exercise {
   name: string
   group: string
   bodyweight: boolean
+  timed?: boolean
   familyId?: string
   variant?: string
   order?: number

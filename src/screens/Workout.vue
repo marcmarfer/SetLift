@@ -9,7 +9,7 @@ import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
-import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, targetOf } from '../lib/targets'
+import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, startingTemplates, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { gearLabel, gearVaries, normalGear, sharedGear } from '../lib/gear'
@@ -46,6 +46,7 @@ interface WorkoutGroup {
   total: number
   previous: SetEntry[]
   record: number
+  timed: boolean
 }
 
 const props = withDefaults(defineProps<{ readonly?: boolean }>(), { readonly: false })
@@ -203,6 +204,23 @@ function swapExercise(exerciseId: string, picked?: Exercise) {
   const exercise = picked ?? data.value.exercises.find((item) => item.id === exerciseId)
   const current = data.value.exercises.find((item) => item.id === group.exerciseId)
   const bodyweight = Boolean(exercise?.bodyweight)
+  const timed = Boolean(exercise?.timed)
+
+  if (timed !== Boolean(current?.timed)) {
+    confirming.value = {
+      title: timed ? 'Pasar a ejercicio por tiempo' : 'Pasar a ejercicio por repeticiones',
+      message: timed
+        ? `${exercise?.name ?? 'El nuevo ejercicio'} se apunta en segundos y ${group.name} en repeticiones, así que lo apuntado no vale para él. Sus series se vaciarán, también las que ya hayas marcado.`
+        : `${exercise?.name ?? 'El nuevo ejercicio'} se apunta en repeticiones y ${group.name} en segundos, así que lo apuntado no vale para él. Sus series se vaciarán, también las que ya hayas marcado.`,
+      label: 'Sustituir y vaciar',
+      tone: 'accent',
+      run: async () => {
+        confirming.value = null
+        replaceExercise(group, exerciseId, bodyweight, timed)
+      },
+    }
+    return
+  }
 
   if (bodyweight === Boolean(current?.bodyweight)) {
     replaceExercise(group, exerciseId)
@@ -223,12 +241,13 @@ function swapExercise(exerciseId: string, picked?: Exercise) {
   }
 }
 
-function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: boolean) {
+function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: boolean, timed?: boolean) {
   for (const set of group.sets) {
     const target = change(set.id)
     if (!target) continue
     target.exerciseId = exerciseId
     if (resetTo === undefined) continue
+    if (timed !== undefined) Object.assign(target, entryTarget(startingTemplates(timed)[0]))
     const fresh = startingWeight(resetTo, settings.bodyweightKg, undefined, undefined)
     target.weight = fresh.weight
     target.bodyweightKg = fresh.bodyweightKg
@@ -310,6 +329,7 @@ const data = useLive<WorkoutData>(
 )
 
 const nameOf = (id: string) => data.value.exercises.find((item) => item.id === id)?.name ?? '—'
+const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
 
 const unsaved = ref<{ previous: Record<string, SetEntry[]>; records: Record<string, number> }>({
   previous: {},
@@ -373,7 +393,8 @@ const groups = computed(() => {
       const sets = [...list].sort((a, b) => a.index - b.index)
       const exerciseId = sets[0].exerciseId
       const template = current.blueprint[slot]
-      const best = current.session?.deload ? 0 : recordOf(exerciseId)
+      const timed = isTimed(exerciseId)
+      const best = current.session?.deload || timed ? 0 : recordOf(exerciseId)
       const recordIds = new Set(
         sets
           .filter((set) => set.done && set.reps != null && best > 0 && estimateOneRepMax(set.weight ?? 0, set.reps) > best)
@@ -394,6 +415,7 @@ const groups = computed(() => {
         total: sets.length,
         previous: previousOf(exerciseId),
         record: recordOf(exerciseId),
+        timed,
       }
     })
 })
@@ -459,7 +481,7 @@ function suggestedLoad(set: SetEntry, weight: number) {
 const editingLoad = computed(() => editing.value?.field === 'weight' && editingSet.value?.bodyweightKg != null)
 
 function targetLabel(set: SetEntry) {
-  return repsLabel(targetOf(set))
+  return repsLabel(targetOf(set), isTimed(set.exerciseId))
 }
 
 
@@ -583,7 +605,7 @@ function templateOf(set: SetEntry): SetTemplate {
 }
 
 function targetSummary(group: WorkoutGroup) {
-  const labels = new Set(group.sets.map((set) => shortLabel(targetOf(set))))
+  const labels = new Set(group.sets.map((set) => shortLabel(targetOf(set), group.timed)))
   return labels.size === 1 ? [...labels][0] : 'Varios objetivos'
 }
 
@@ -1083,7 +1105,7 @@ async function removeSheet() {
                 <span>Serie</span>
                 <span>Anterior</span>
                 <span class="text-center">{{ hasBodyweight(group) ? 'Lastre' : 'kg' }}</span>
-                <span class="text-center">Reps</span>
+                <span class="text-center">{{ group.timed ? 'Seg' : 'Reps' }}</span>
                 <span class="text-center">✓</span>
               </div>
 
@@ -1158,8 +1180,9 @@ async function removeSheet() {
                       ? 'text-[11.5px] text-dim'
                       : 'text-[14px] text-dim'"
                 >
-                  {{ set.reps ?? targetLabel(set) }}
+                  {{ set.reps ?? targetLabel(set).replace(/ s$/, '') }}
                 </span>
+                <span v-if="group.timed && set.reps != null" class="text-[9px] font-semibold leading-none text-dim">s</span>
                 <span v-if="gainLabel(set)" class="num text-[10px] font-semibold text-ok">{{ gainLabel(set) }}</span>
               </component>
 
@@ -1200,7 +1223,7 @@ async function removeSheet() {
               class="flex items-center gap-2.5 rounded-2xl border border-accent-line bg-accent-soft py-2 pl-3.5 pr-2"
             >
               <span class="flex-grow text-[12.5px] leading-snug text-accent-ink">
-                {{ suggestion(set, group)?.reps }} reps <span class="text-dim">→</span> prueba
+                {{ group.timed ? `${suggestion(set, group)?.reps} s` : `${suggestion(set, group)?.reps} reps` }} <span class="text-dim">→</span> prueba
                 <span class="num font-semibold text-ink">{{ suggestedLoad(set, suggestion(set, group)?.weight ?? 0) }}</span> en la siguiente
               </span>
               <button
@@ -1316,6 +1339,7 @@ async function removeSheet() {
       :context="`${editingGroup?.name ?? ''} · serie ${editingSet.index}`"
       :label="editingLoad ? 'Lastre' : undefined"
       :hint="editingGroup?.previous[editingSet.index - 1]?.reps ?? null"
+      :timed="editing.field === 'reps' && isTimed(editingSet.exerciseId)"
       @commit="commit"
       @next="commitAndAdvance"
       @close="editing = null"
@@ -1364,6 +1388,7 @@ async function removeSheet() {
       :count="targetFor.sets.length"
       :sets="targetFor.sets.map(templateOf)"
       :exercise-name="targetFor.name"
+      :timed="targetFor.timed"
       subtitle="Solo para esta hoja: la rutina no cambia"
       @apply="applyTarget"
       @close="targetFor = null"
@@ -1373,7 +1398,7 @@ async function removeSheet() {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: creating, group: '', bodyweight: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

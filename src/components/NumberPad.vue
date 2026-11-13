@@ -10,6 +10,7 @@ const props = defineProps<{
   label?: string
   action?: string
   stepKg?: number
+  timed?: boolean
 }>()
 
 const stepSize = computed(() => props.stepKg ?? 2.5)
@@ -41,6 +42,10 @@ const parsed = computed(() => {
 })
 
 const quickReps = computed(() => {
+  if (props.timed) {
+    const base = Math.max(15, Math.round((props.hint ?? 30) / 5) * 5)
+    return Array.from({ length: 7 }, (_, index) => base - 10 + index * 5)
+  }
   const base = props.hint ?? 10
   return Array.from({ length: 7 }, (_, index) => Math.max(1, base - 2 + index))
 })
@@ -79,7 +84,7 @@ function pick(reps: number) {
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-[13px] font-semibold">{{ label ?? (field === 'weight' ? 'Peso' : 'Reps') }}</span>
+        <span class="text-[13px] font-semibold">{{ label ?? (field === 'weight' ? 'Peso' : timed ? 'Segundos' : 'Reps') }}</span>
         <span class="flex-grow" />
         <span class="text-xs text-dim">{{ context }}</span>
       </div>

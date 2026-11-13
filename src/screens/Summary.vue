@@ -9,7 +9,7 @@ import { estimateOneRepMax, progression } from '../lib/progress'
 import { bySession } from '../lib/upcoming'
 import { bestOneRepMax, previousSession } from '../lib/session'
 import { sessionVolume } from '../lib/plan'
-import { extraLoad } from '../lib/bodyweight'
+import { extraLoad, weightLabel } from '../lib/bodyweight'
 import type { Exercise, Routine, Session, SetEntry } from '../types'
 
 const route = useRoute()
@@ -54,14 +54,17 @@ const data = useLive<SummaryData>(
 )
 
 const nameOf = (id: string) => data.value.exercises.find((item) => item.id === id)?.name ?? '—'
+const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
+const bestWeight = (set: SetEntry | null) => (set ? weightLabel(set, format) ?? format(set.weight ?? 0) : '')
+const countText = (id: string, count: number | null | undefined) => `${count ?? ''}${isTimed(id) ? ' s' : ''}`
 
 const format = (value: number) => String(value).replace('.', ',')
 
-function best(sets: SetEntry[]) {
+function best(sets: SetEntry[], timed: boolean) {
   if (sets.length === 0) return null
-  return sets.reduce((a, b) =>
-    estimateOneRepMax(b.weight ?? 0, b.reps ?? 0) > estimateOneRepMax(a.weight ?? 0, a.reps ?? 0) ? b : a,
-  )
+  const score = (set: SetEntry) =>
+    timed ? (set.weight ?? 0) * 10000 + (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+  return sets.reduce((a, b) => (score(b) > score(a) ? b : a))
 }
 
 const deload = computed(() => data.value.session?.deload === true)
@@ -72,18 +75,19 @@ const lines = computed(() => {
 
   return ids.map((id) => {
     const mine = current.sets.filter((set) => set.exerciseId === id)
-    const bestNow = best(mine)
-    const bestBefore = best(current.previous[id] ?? [])
+    const timed = isTimed(id)
+    const bestNow = best(mine, timed)
+    const bestBefore = best(current.previous[id] ?? [], timed)
 
-    const nowScore = estimateOneRepMax(bestNow?.weight ?? 0, bestNow?.reps ?? 0)
-    const beforeScore = estimateOneRepMax(bestBefore?.weight ?? 0, bestBefore?.reps ?? 0)
+    const nowScore = timed ? bestNow?.reps ?? 0 : estimateOneRepMax(bestNow?.weight ?? 0, bestNow?.reps ?? 0)
+    const beforeScore = timed ? bestBefore?.reps ?? 0 : estimateOneRepMax(bestBefore?.weight ?? 0, bestBefore?.reps ?? 0)
 
     let delta = ''
     if (bestBefore && bestNow && !deload.value) {
       if ((bestNow.weight ?? 0) > (bestBefore.weight ?? 0)) {
         delta = `↑ +${format((bestNow.weight ?? 0) - (bestBefore.weight ?? 0))} kg`
       } else if ((bestNow.reps ?? 0) > (bestBefore.reps ?? 0)) {
-        delta = `↑ +${(bestNow.reps ?? 0) - (bestBefore.reps ?? 0)} rep`
+        delta = `↑ +${(bestNow.reps ?? 0) - (bestBefore.reps ?? 0)} ${timed ? 's' : 'rep'}`
       } else if (nowScore < beforeScore) {
         delta = '↓'
       } else {
@@ -96,7 +100,7 @@ const lines = computed(() => {
       name: nameOf(id),
       best: bestNow,
       delta,
-      isRecord: !deload.value && nowScore > (current.records[id] ?? 0) && (current.records[id] ?? 0) > 0,
+      isRecord: !deload.value && !timed && nowScore > (current.records[id] ?? 0) && (current.records[id] ?? 0) > 0,
     }
   })
 })
@@ -105,7 +109,7 @@ const records = computed(() => lines.value.filter((line) => line.isRecord))
 
 const totals = computed(() => ({
   sets: data.value.sets.length,
-  volume: Math.round(sessionVolume(data.value.sets)),
+  volume: Math.round(sessionVolume(data.value.sets, data.value.exercises)),
 }))
 
 function templateWeight(set: SetEntry | undefined) {
@@ -119,6 +123,11 @@ function loadLabel(set: SetEntry, weight: number) {
   return `lastre ${load >= 0 ? '+' : '-'}${format(Math.abs(load))} kg`
 }
 
+function missingText(missing: number, timed: boolean) {
+  if (timed) return `${missing === 1 ? 'falta' : 'faltan'} ${missing} s`
+  return missing === 1 ? 'falta 1 rep' : `faltan ${missing} reps`
+}
+
 const nextTime = computed(() => {
   const routine = data.value.routine
   if (!routine || deload.value) return []
@@ -127,7 +136,8 @@ const nextTime = computed(() => {
     const mine = data.value.sheet.filter((set) => set.exerciseId === item.exerciseId)
     const plan = progression(mine, item.incrementKg)
     const done = plan.carried
-    const reps = mine.filter((set) => set.done).sort((a, b) => a.index - b.index).map((set) => set.reps).join(' · ')
+    const timed = isTimed(item.exerciseId)
+    const reps = mine.filter((set) => set.done).sort((a, b) => a.index - b.index).map((set) => set.reps).join(' · ') + (timed ? ' s' : '')
 
     if (plan.uniform && plan.next != null && plan.missing != null) {
       const target = loadLabel(done[0], plan.next)
@@ -137,7 +147,7 @@ const nextTime = computed(() => {
         raised: plan.raised,
         text: plan.raised
           ? `la próxima vez, ${target}`
-          : `te ${plan.missing === 1 ? 'falta 1 rep' : `faltan ${plan.missing} reps`} para subir a ${target}`,
+          : `te ${missingText(plan.missing, timed)} para subir a ${target}`,
       }]
     }
 
@@ -222,7 +232,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         <div v-for="line in records" :key="line.id" class="flex items-center gap-2.5">
           <span class="flex-grow text-sm text-hero-ink">{{ line.name }}</span>
           <span class="num text-[15px] font-bold text-hero-ink">
-            {{ format(line.best?.weight ?? 0) }} × {{ line.best?.reps }}
+            {{ bestWeight(line.best) }} × {{ countText(line.id, line.best?.reps) }}
           </span>
         </div>
       </section>
@@ -249,7 +259,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           :class="index > 0 ? 'border-t border-line' : ''"
         >
           <span class="flex-grow truncate text-sm">{{ line.name }}</span>
-          <span class="num text-[13px] text-muted">{{ format(line.best?.weight ?? 0) }} × {{ line.best?.reps }}</span>
+          <span class="num text-[13px] text-muted">{{ bestWeight(line.best) }} × {{ countText(line.id, line.best?.reps) }}</span>
           <span
             v-if="!deload"
             class="num w-[62px] text-right text-[13px] font-semibold"
