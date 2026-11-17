@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ExerciseTrend, TrendUnit } from '../lib/progress'
+import { minutesLabel } from '../lib/targets'
 
 defineProps<{ trend: ExerciseTrend }>()
 
@@ -11,6 +12,7 @@ const changeLabel = (change: number, unit: TrendUnit) => {
   const value = Math.abs(change)
   if (unit === 'reps') return `${sign}${value} reps`
   if (unit === 'seconds') return `${sign}${value} s`
+  if (unit === 'minutes') return `${sign}${minutesLabel(value)} min`
   return `${sign}${value.toFixed(value < 10 ? 1 : 0)}%`
 }
 </script>
@@ -23,7 +25,8 @@ const changeLabel = (change: number, unit: TrendUnit) => {
     <div class="flex flex-grow flex-col gap-0.5">
       <span class="text-[15px] font-semibold">{{ trend.exercise.name }}</span>
       <span class="num text-[12.5px] text-sub">
-        {{ weightLabel(trend.best.weight) }} × {{ trend.best.reps }}{{ trend.exercise.timed ? ' s' : '' }}
+        <template v-if="trend.exercise.cardio">{{ minutesLabel(trend.best.reps) }} min</template>
+        <template v-else>{{ weightLabel(trend.best.weight) }} × {{ trend.best.reps }}{{ trend.exercise.timed ? ' s' : '' }}</template>
       </span>
     </div>
     <span

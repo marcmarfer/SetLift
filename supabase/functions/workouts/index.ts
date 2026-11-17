@@ -55,7 +55,7 @@ function targetOf(set: Row) {
   return target
 }
 
-function setOf(set: Row, bodyweightExercise: boolean, timedExercise: boolean) {
+function setOf(set: Row, bodyweightExercise: boolean, timedExercise: boolean, cardioExercise: boolean) {
   const weight = set.weight != null ? Number(set.weight) : null
   const bodyweightKg = set.bodyweight_kg != null ? Number(set.bodyweight_kg) : null
   const out: Row = { set: set.set_index, weight_kg: weight }
@@ -68,6 +68,13 @@ function setOf(set: Row, bodyweightExercise: boolean, timedExercise: boolean) {
   return {
     ...out,
     ...(timedExercise ? { seconds: set.reps } : { reps: set.reps }),
+    ...(cardioExercise
+      ? {
+          speed_kmh: set.speed_kmh != null ? Number(set.speed_kmh) : null,
+          incline_pct: set.incline_pct != null ? Number(set.incline_pct) : null,
+          distance_km: set.distance_km != null ? Number(set.distance_km) : null,
+        }
+      : {}),
     done: set.done,
     done_at: set.done_at,
     target: targetOf(set),
@@ -120,7 +127,7 @@ Deno.serve(async (request) => {
       db.from('profiles').select('name, units, bodyweight_kg').eq('user_id', userId).maybeSingle(),
       all((a, b) => db.from('routines').select('id, name').eq('user_id', userId).range(a, b)),
       all((a, b) =>
-        db.from('exercises').select('id, name, muscle_group, bodyweight, timed, family_id, variant')
+        db.from('exercises').select('id, name, muscle_group, bodyweight, timed, cardio, family_id, variant')
           .or(`owner_id.is.null,owner_id.eq.${userId}`).range(a, b),
       ),
       all((a, b) => db.from('exercise_families').select('id, name').range(a, b)),
@@ -163,6 +170,7 @@ Deno.serve(async (request) => {
             const exercise = exerciseById.get(group[0].exercise_id)
             const bodyweightExercise = Boolean(exercise?.bodyweight)
             const timedExercise = Boolean(exercise?.timed)
+            const cardioExercise = Boolean(exercise?.cardio)
             return {
               exercise: exercise?.name ?? 'Ejercicio borrado',
               exercise_id: group[0].exercise_id,
@@ -171,7 +179,8 @@ Deno.serve(async (request) => {
               muscle_group: exercise?.muscle_group ?? null,
               bodyweight_exercise: bodyweightExercise,
               timed_exercise: timedExercise,
-              sets: group.map((set) => setOf(set, bodyweightExercise, timedExercise)),
+              cardio_exercise: cardioExercise,
+              sets: group.map((set) => setOf(set, bodyweightExercise, timedExercise, cardioExercise)),
             }
           }),
         }
@@ -190,6 +199,7 @@ Deno.serve(async (request) => {
         'deload: true marks a deload workout; SetLift leaves it out of records, 1RM estimates and progression',
         'weight_kg on bodyweight exercises is the total moved; bodyweight_kg is the body share and added_load_kg the extra load (negative = assisted)',
         'timed_exercise: true (planks, holds) logs seconds instead of reps, and its target reps are seconds too; those sets do not count towards volume_kg',
+        'cardio_exercise: true (treadmill, bike) is also timed: seconds is the duration, with speed_kmh, incline_pct and distance_km when logged',
         'target is what was planned for the set; effort (rir / rpe / failure) is a target, not logged',
         'gear values: chalk, belt, straps, wristWraps, kneeSleeves',
         'send the key as Authorization: Bearer <key>; query params: from=YYYY-MM-DD, to=YYYY-MM-DD, limit=N (latest N workouts)',

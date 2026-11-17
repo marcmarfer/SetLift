@@ -10,6 +10,7 @@ import { bySession } from '../lib/upcoming'
 import { bestOneRepMax, previousSession } from '../lib/session'
 import { sessionVolume } from '../lib/plan'
 import { extraLoad, weightLabel } from '../lib/bodyweight'
+import { minutesLabel } from '../lib/targets'
 import type { Exercise, Routine, Session, SetEntry } from '../types'
 
 const route = useRoute()
@@ -56,7 +57,21 @@ const data = useLive<SummaryData>(
 const nameOf = (id: string) => data.value.exercises.find((item) => item.id === id)?.name ?? '—'
 const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
 const bestWeight = (set: SetEntry | null) => (set ? weightLabel(set, format) ?? format(set.weight ?? 0) : '')
+const isCardio = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.cardio)
 const countText = (id: string, count: number | null | undefined) => `${count ?? ''}${isTimed(id) ? ' s' : ''}`
+
+function cardioText(set: SetEntry | null) {
+  if (!set) return ''
+  return [
+    set.reps != null ? `${minutesLabel(set.reps)} min` : null,
+    set.speedKmh != null ? `${format(set.speedKmh)} km/h` : null,
+    set.inclinePct != null ? `${format(set.inclinePct)} %` : null,
+    set.distanceKm != null ? `${format(set.distanceKm)} km` : null,
+  ].filter(Boolean).join(' · ')
+}
+
+const bestText = (id: string, set: SetEntry | null) =>
+  isCardio(id) ? cardioText(set) : `${bestWeight(set)} × ${countText(id, set?.reps)}`
 
 const format = (value: number) => String(value).replace('.', ',')
 
@@ -87,7 +102,8 @@ const lines = computed(() => {
       if ((bestNow.weight ?? 0) > (bestBefore.weight ?? 0)) {
         delta = `↑ +${format((bestNow.weight ?? 0) - (bestBefore.weight ?? 0))} kg`
       } else if ((bestNow.reps ?? 0) > (bestBefore.reps ?? 0)) {
-        delta = `↑ +${(bestNow.reps ?? 0) - (bestBefore.reps ?? 0)} ${timed ? 's' : 'rep'}`
+        const gain = (bestNow.reps ?? 0) - (bestBefore.reps ?? 0)
+        delta = isCardio(id) ? `↑ +${minutesLabel(gain)} min` : `↑ +${gain} ${timed ? 's' : 'rep'}`
       } else if (nowScore < beforeScore) {
         delta = '↓'
       } else {
@@ -133,6 +149,7 @@ const nextTime = computed(() => {
   if (!routine || deload.value) return []
 
   return routine.exercises.flatMap((item) => {
+    if (isCardio(item.exerciseId)) return []
     const mine = data.value.sheet.filter((set) => set.exerciseId === item.exerciseId)
     const plan = progression(mine, item.incrementKg)
     const done = plan.carried
@@ -232,7 +249,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         <div v-for="line in records" :key="line.id" class="flex items-center gap-2.5">
           <span class="flex-grow text-sm text-hero-ink">{{ line.name }}</span>
           <span class="num text-[15px] font-bold text-hero-ink">
-            {{ bestWeight(line.best) }} × {{ countText(line.id, line.best?.reps) }}
+            {{ bestText(line.id, line.best) }}
           </span>
         </div>
       </section>
@@ -259,7 +276,7 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
           :class="index > 0 ? 'border-t border-line' : ''"
         >
           <span class="flex-grow truncate text-sm">{{ line.name }}</span>
-          <span class="num text-[13px] text-muted">{{ bestWeight(line.best) }} × {{ countText(line.id, line.best?.reps) }}</span>
+          <span class="num text-[13px] text-muted">{{ bestText(line.id, line.best) }}</span>
           <span
             v-if="!deload"
             class="num w-[62px] text-right text-[13px] font-semibold"

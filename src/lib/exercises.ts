@@ -9,6 +9,7 @@ export interface ExerciseDraft {
   group: string
   bodyweight: boolean
   timed: boolean
+  cardio: boolean
 }
 
 export async function createExercise(draft: ExerciseDraft, ownerId: string) {
@@ -18,7 +19,8 @@ export async function createExercise(draft: ExerciseDraft, ownerId: string) {
     name: draft.name.trim(),
     group: draft.group.trim(),
     bodyweight: draft.bodyweight,
-    timed: draft.timed,
+    timed: draft.timed || draft.cardio,
+    cardio: draft.cardio,
     updatedAt: Date.now(),
   }
   await db.exercises.put(exercise)
@@ -30,14 +32,15 @@ export async function updateExercise(id: string, draft: ExerciseDraft) {
     name: draft.name.trim(),
     group: draft.group.trim(),
     bodyweight: draft.bodyweight,
-    timed: draft.timed,
+    timed: draft.timed || draft.cardio,
+    cardio: draft.cardio,
     updatedAt: Date.now(),
   })
 }
 
 export async function duplicateExercise(source: Exercise, ownerId: string) {
   return createExercise(
-    { name: `${source.name} (mío)`, group: source.group, bodyweight: source.bodyweight, timed: Boolean(source.timed) },
+    { name: `${source.name} (mío)`, group: source.group, bodyweight: source.bodyweight, timed: Boolean(source.timed), cardio: Boolean(source.cardio) },
     ownerId,
   )
 }
