@@ -256,7 +256,8 @@ export async function exerciseEntries(sessionId: string, exerciseId: string, slo
         effort: set.targetEffort,
         weight: set.weight ?? 0,
       }))
-    : startingTemplates(Boolean((await db.exercises.get(exerciseId))?.timed))
+    : await db.exercises.get(exerciseId).then((exercise) =>
+        startingTemplates(Boolean(exercise?.timed), Boolean(exercise?.cardio)))
 
   return templates.map((template, position) =>
     entryFrom(

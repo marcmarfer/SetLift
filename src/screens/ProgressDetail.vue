@@ -66,6 +66,7 @@ const data = useLive<DetailData>(
 )
 
 const timed = computed(() => Boolean(data.value.exercise?.timed))
+const cardio = computed(() => Boolean(data.value.exercise?.cardio))
 const byCount = computed(() => timed.value || (data.value.exercise?.bodyweight ?? false))
 
 const auth = useAuthStore()
@@ -160,7 +161,7 @@ const points = computed(() => {
   for (const set of current.sets) {
     const date = dateOf.value.get(set.sessionId)
     if (!date || date < limit) continue
-    const score = byCount.value ? (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+    const score = cardio.value ? (set.reps ?? 0) / 60 : byCount.value ? (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
     byDate.set(date, Math.max(byDate.get(date) ?? 0, score))
   }
 
@@ -335,11 +336,11 @@ const format = (value: number) => String(value).replace('.', ',')
 
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-            {{ byCount ? 'Mejor serie' : '1RM estimado' }}
+            {{ cardio ? 'Más tiempo' : byCount ? 'Mejor serie' : '1RM estimado' }}
           </span>
           <div class="flex items-baseline gap-1.5">
             <span class="num text-[38px] font-bold leading-none tracking-[-0.02em]">{{ current ? current.value : '—' }}</span>
-            <span v-if="current" class="text-[15px] text-dim">{{ timed ? 's' : byCount ? 'reps' : 'kg' }}</span>
+            <span v-if="current" class="text-[15px] text-dim">{{ cardio ? 'min' : timed ? 's' : byCount ? 'reps' : 'kg' }}</span>
           </div>
           <span
             v-if="current"
@@ -423,7 +424,7 @@ const format = (value: number) => String(value).replace('.', ',')
       v-if="editing && data.exercise"
       title="Editar ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight, timed: Boolean(data.exercise.timed) }"
+      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight, timed: Boolean(data.exercise.timed), cardio: Boolean(data.exercise.cardio) }"
       :usage="usage"
       @save="saveExercise"
       @remove="askRemoval"

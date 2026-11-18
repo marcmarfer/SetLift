@@ -141,6 +141,7 @@ const isBodyweight = (id: string) =>
   data.value.exercises.find((exercise) => exercise.id === id)?.bodyweight ?? false
 
 const isTimed = (id: string) => Boolean(data.value.exercises.find((exercise) => exercise.id === id)?.timed)
+const isCardio = (id: string) => Boolean(data.value.exercises.find((exercise) => exercise.id === id)?.cardio)
 
 const totalSets = computed(() => items.value.reduce((count, item) => count + item.sets.length, 0))
 
@@ -215,8 +216,8 @@ const swapAlternatives = computed(() => {
 
 const withoutWeights = (sets: SetTemplate[]) => sets.map((set) => ({ ...set, weight: 0 }))
 
-const retimed = (sets: SetTemplate[], timed: boolean) =>
-  sets.map((set) => ({ ...startingTemplates(timed)[0], weight: set.weight, gear: set.gear }))
+const retimed = (sets: SetTemplate[], timed: boolean, cardio: boolean) =>
+  sets.map((set) => ({ ...startingTemplates(timed, cardio)[0], weight: set.weight, gear: set.gear }))
 
 async function swapExercise(exerciseId: string, picked?: Exercise) {
   const index = swapIndex.value
@@ -227,12 +228,13 @@ async function swapExercise(exerciseId: string, picked?: Exercise) {
   const exercise = picked ?? data.value.exercises.find((candidate) => candidate.id === exerciseId)
   const bodyweight = Boolean(exercise?.bodyweight)
   const timed = Boolean(exercise?.timed)
-  const source = timed === isTimed(item.exerciseId)
+  const cardio = Boolean(exercise?.cardio)
+  const source = timed === isTimed(item.exerciseId) && cardio === isCardio(item.exerciseId)
     ? item
     : {
         ...item,
-        sets: retimed(item.sets, timed),
-        ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: retimed(plan.sets, timed) })) } : {}),
+        sets: retimed(item.sets, timed, cardio),
+        ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: retimed(plan.sets, timed, cardio) })) } : {}),
       }
 
   if (bodyweight === isBodyweight(item.exerciseId)) {
@@ -316,7 +318,7 @@ const editingTarget = computed(() => {
   const item = items.value[spot.index]
   const template = item?.sets[spot.position]
   if (!item || !template) return null
-  return { spot, template, count: item.sets.length, name: nameOf(item.exerciseId), timed: isTimed(item.exerciseId) }
+  return { spot, template, count: item.sets.length, name: nameOf(item.exerciseId), timed: isTimed(item.exerciseId), cardio: isCardio(item.exerciseId) }
 })
 
 function applyTarget(changes: Partial<SetTemplate>, all: boolean) {
@@ -441,9 +443,9 @@ function toggleRest(index: number) {
 async function addExercise(exerciseId: string) {
   const exercises = [...items.value, {
     exerciseId,
-    sets: startingTemplates(isTimed(exerciseId)),
+    sets: startingTemplates(isTimed(exerciseId), isCardio(exerciseId)),
     restSec: null,
-    incrementKg: 2.5,
+    incrementKg: isCardio(exerciseId) ? 0 : 2.5,
   }]
 
   picking.value = false
@@ -853,6 +855,7 @@ function restLabel(item: RoutineExercise) {
       :count="editingTarget.count"
       :exercise-name="editingTarget.name"
       :timed="editingTarget.timed"
+      :cardio="editingTarget.cardio"
       @apply="applyTarget"
       @close="targetEditor = null"
     />
@@ -901,7 +904,7 @@ function restLabel(item: RoutineExercise) {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="groups"
-      :draft="{ name: creating, group: '', bodyweight: false, timed: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

@@ -39,6 +39,7 @@ export interface Exercise {
   group: string
   bodyweight: boolean
   timed?: boolean
+  cardio?: boolean
   familyId?: string
   variant?: string
   order?: number
@@ -140,6 +141,9 @@ export interface SetEntry {
   weight: number | null
   bodyweightKg?: number
   reps: number | null
+  distanceKm?: number | null
+  speedKmh?: number | null
+  inclinePct?: number | null
   done: boolean
   doneAt: number | null
   updatedAt: number

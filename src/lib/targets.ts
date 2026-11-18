@@ -46,12 +46,24 @@ export const repsModesFor = (timed = false) =>
 
 export const rangePresetsFor = (timed = false) => (timed ? TIMED_RANGE_PRESETS : RANGE_PRESETS)
 
-export const startingTemplates = (timed = false): SetTemplate[] => {
+export const CARDIO_RANGE_PRESETS: Array<[number, number]> = [
+  [900, 1200],
+  [1200, 1800],
+  [1800, 2700],
+]
+
+export const startingTemplates = (timed = false, cardio = false): SetTemplate[] => {
+  if (cardio) return [{ type: 'fixed', reps: 1200, weight: 0 }]
   const [repsMin, repsMax] = timed ? [30, 45] : [8, 12]
   return Array.from({ length: 3 }, () => ({ type: 'range', repsMin, repsMax, weight: 0 }))
 }
 
-export const countLabel = (count: number, timed: boolean) => (timed ? `${count} s` : String(count))
+export const minutesLabel = (seconds: number) => String(Math.round((seconds / 60) * 10) / 10).replace('.', ',')
+
+export function countLabel(count: number, timed: boolean) {
+  if (!timed) return String(count)
+  return count >= 600 && count % 60 === 0 ? `${count / 60} min` : `${count} s`
+}
 
 export const RIR_PRESETS: Array<[number, number]> = [
   [0, 0],
@@ -123,7 +135,10 @@ export function repsLabel(target: Target, timed = false) {
   if (reps === 'amrap') return timed ? 'Máx.' : 'AMRAP'
   if (reps === 'single') return 'Single'
   if (reps === 'fixed') return target.reps == null ? '' : countLabel(target.reps, timed)
-  return `${target.repsMin ?? 0}–${target.repsMax ?? 0}${timed ? ' s' : ''}`
+  const min = target.repsMin ?? 0
+  const max = target.repsMax ?? 0
+  if (timed && min >= 600 && min % 60 === 0 && max % 60 === 0) return `${min / 60}–${max / 60} min`
+  return `${min}–${max}${timed ? ' s' : ''}`
 }
 
 export function effortLabel(target: Target) {

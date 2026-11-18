@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useSheetDrag } from '../composables/useSheetDrag'
 import {
+  CARDIO_RANGE_PRESETS,
   EFFORT_MODES,
   RIR_PRESETS,
   RPE_STEPS,
@@ -22,6 +23,7 @@ const props = defineProps<{
   subtitle?: string
   sets?: SetTemplate[]
   timed?: boolean
+  cardio?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -35,11 +37,14 @@ const panel = ref<HTMLElement | null>(null)
 const drag = useSheetDrag(panel, () => emit('close'))
 
 const repsModes = repsModesFor(props.timed)
-const rangePresets = rangePresetsFor(props.timed)
-const step = props.timed ? 5 : 1
-const ceiling = props.timed ? 600 : 50
-const defaults = props.timed ? { fixed: 30, min: 30, max: 45 } : { fixed: 5, min: 8, max: 12 }
-const unit = props.timed ? ' s' : ''
+const rangePresets = props.cardio ? CARDIO_RANGE_PRESETS : rangePresetsFor(props.timed)
+const step = props.cardio ? 60 : props.timed ? 5 : 1
+const ceiling = props.cardio ? 7200 : props.timed ? 600 : 50
+const defaults = props.cardio
+  ? { fixed: 1200, min: 1200, max: 1800 }
+  : props.timed ? { fixed: 30, min: 30, max: 45 } : { fixed: 5, min: 8, max: 12 }
+const unit = props.cardio ? ' min' : props.timed ? ' s' : ''
+const shown = (count: number) => (props.cardio ? count / 60 : count)
 
 const reps = ref<RepsTarget>(repsOf(props.template))
 const effort = ref<EffortTarget | null>(effortOf(props.template))
@@ -202,7 +207,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
               :class="activeRange === spot ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2'"
               type="button"
               @click="pickRange(preset)"
-            >{{ preset[0] }}–{{ preset[1] }}{{ unit }}</button>
+            >{{ shown(preset[0]) }}–{{ shown(preset[1]) }}{{ unit }}</button>
             <button
               class="flex h-11 items-center justify-center rounded-xl border text-[13px] font-semibold"
               :class="customRange ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line-btn bg-surface-2 text-muted'"
@@ -217,7 +222,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMin(-1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
               </button>
-              <span class="num w-12 text-center text-[17px] font-bold">{{ repsMin }}{{ unit }}</span>
+              <span class="num w-12 text-center text-[17px] font-bold">{{ shown(repsMin) }}{{ unit }}</span>
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMin(1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
               </button>
@@ -227,7 +232,7 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMax(-1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
               </button>
-              <span class="num w-12 text-center text-[17px] font-bold">{{ repsMax }}{{ unit }}</span>
+              <span class="num w-12 text-center text-[17px] font-bold">{{ shown(repsMax) }}{{ unit }}</span>
               <button class="flex h-10 w-10 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftRepsMax(1)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
               </button>
@@ -236,18 +241,18 @@ const preview = computed(() => shortLabel({ ...props.template, ...changes.value 
         </template>
 
         <div v-else-if="reps === 'fixed'" class="flex items-center gap-2.5 rounded-2xl border border-line bg-app p-3">
-          <span class="flex-grow text-[13px] text-muted">{{ timed ? 'Segundos' : 'Repeticiones' }}</span>
+          <span class="flex-grow text-[13px] text-muted">{{ cardio ? 'Minutos' : timed ? 'Segundos' : 'Repeticiones' }}</span>
           <button class="flex h-11 w-11 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftFixed(-1)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /></svg>
           </button>
-          <span class="num w-14 text-center text-xl font-bold">{{ fixedReps }}{{ unit }}</span>
+          <span class="num min-w-14 text-center text-xl font-bold">{{ shown(fixedReps) }}{{ unit }}</span>
           <button class="flex h-11 w-11 items-center justify-center rounded-xl border border-line-btn bg-surface text-muted" type="button" @click="shiftFixed(1)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
         </div>
       </div>
 
-      <div v-if="effortModes.length > 1" class="flex flex-col gap-2">
+      <div v-if="effortModes.length > 1 && !cardio" class="flex flex-col gap-2">
         <span class="text-[13px] text-muted">Esfuerzo</span>
         <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${effortModes.length}, minmax(0, 1fr))` }">
           <button

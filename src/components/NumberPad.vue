@@ -11,6 +11,7 @@ const props = defineProps<{
   action?: string
   stepKg?: number
   timed?: boolean
+  unit?: string
 }>()
 
 const stepSize = computed(() => props.stepKg ?? 2.5)
@@ -107,7 +108,7 @@ function pick(reps: number) {
       <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(-stepSize)">−{{ stepLabel }}</button>
       <div class="num flex h-14 flex-grow items-center justify-center gap-1 rounded-2xl border border-line-btn bg-app">
         <span class="text-[22px] font-bold">{{ draft || '—' }}</span>
-        <span class="text-[13px] text-dim">kg</span>
+        <span class="text-[13px] text-dim">{{ unit ?? 'kg' }}</span>
       </div>
       <button class="num h-14 w-[74px] rounded-2xl border border-line-btn bg-surface-2 text-[15px] font-semibold" type="button" @click="step(stepSize)">+{{ stepLabel }}</button>
     </div>

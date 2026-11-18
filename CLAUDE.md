@@ -42,6 +42,8 @@ Tables (`src/db/index.ts`); booleans are not indexed because IndexedDB cannot:
   with `ownerId` it is the user's own. A variant has `familyId` and a short `variant` label.
   `bodyweight` exercises chart reps, not kilos. `timed` exercises (plank, holds) keep seconds in the
   set's `reps` and read their reps targets as seconds; they stay out of the 1RM, records and volume.
+  `cardio` exercises (treadmill, bike) are also `timed`: the set keeps the duration in seconds in `reps`,
+  shown as minutes, plus `speedKmh`, `inclinePct` and `distanceKm`; they skip the weight and progression.
 - `exercisePreferences` — favourite and manual 1RM, per exercise id: the catalogue row can't hold
   them because it is not writable.
 - `routines` — an ordered list of exercises, each with its set templates, rest, weight increment

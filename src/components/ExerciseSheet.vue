@@ -39,10 +39,17 @@ const name = ref(props.draft?.name ?? '')
 const group = ref(props.draft?.group ?? '')
 const bodyweight = ref(props.draft?.bodyweight ?? false)
 const timed = ref(props.draft?.timed ?? false)
+const cardio = ref(props.draft?.cardio ?? false)
 
 function save() {
   if (!name.value.trim() || !group.value.trim()) return
-  emit('save', { name: name.value, group: group.value, bodyweight: bodyweight.value, timed: timed.value })
+  emit('save', {
+    name: name.value,
+    group: group.value,
+    bodyweight: cardio.value ? false : bodyweight.value,
+    timed: cardio.value || timed.value,
+    cardio: cardio.value,
+  })
 }
 </script>
 
@@ -91,6 +98,23 @@ function save() {
         class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5"
         type="button"
         role="switch"
+        :aria-checked="cardio"
+        @click="cardio = !cardio"
+      >
+        <span class="flex flex-grow flex-col items-start gap-0.5">
+          <span class="text-[15px] font-semibold">Cardio</span>
+          <span class="text-[11.5px] text-faint">Cinta, bici… minutos, velocidad, inclinación y km</span>
+        </span>
+        <span class="flex h-7 w-12 items-center rounded-full p-0.5 transition-colors" :class="cardio ? 'bg-accent' : 'bg-line-btn'">
+          <span class="h-6 w-6 rounded-full bg-surface shadow-card transition-transform" :class="cardio ? 'translate-x-5' : ''" />
+        </span>
+      </button>
+
+      <button
+        v-if="!cardio"
+        class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5"
+        type="button"
+        role="switch"
         :aria-checked="bodyweight"
         @click="bodyweight = !bodyweight"
       >
@@ -104,6 +128,7 @@ function save() {
       </button>
 
       <button
+        v-if="!cardio"
         class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5"
         type="button"
         role="switch"

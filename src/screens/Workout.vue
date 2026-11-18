@@ -9,7 +9,7 @@ import { longDay, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
 import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
-import { effortLabel, effortOf, entryTarget, minReps, repsLabel, repsOf, shortLabel, startingTemplates, targetOf } from '../lib/targets'
+import { effortLabel, effortOf, entryTarget, minReps, minutesLabel, repsLabel, repsOf, shortLabel, startingTemplates, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
 import { gearLabel, gearVaries, normalGear, sharedGear } from '../lib/gear'
@@ -47,6 +47,7 @@ interface WorkoutGroup {
   previous: SetEntry[]
   record: number
   timed: boolean
+  cardio: boolean
 }
 
 const props = withDefaults(defineProps<{ readonly?: boolean }>(), { readonly: false })
@@ -76,7 +77,19 @@ async function saveNewExercise(draft: ExerciseDraft) {
 
 const sessionId = computed(() => String(route.params.id ?? ''))
 const openExerciseId = ref<string | null>(null)
-const editing = ref<{ setId: string; field: 'weight' | 'reps' } | null>(null)
+type CardioField = 'speedKmh' | 'inclinePct' | 'distanceKm'
+type EditField = 'weight' | 'reps' | CardioField
+
+const CARDIO_PADS: Record<CardioField | 'minutes', { label: string; unit: string; step: number }> = {
+  minutes: { label: 'Minutos', unit: 'min', step: 5 },
+  speedKmh: { label: 'Velocidad', unit: 'km/h', step: 0.5 },
+  inclinePct: { label: 'Inclinación', unit: '%', step: 0.5 },
+  distanceKm: { label: 'Distancia', unit: 'km', step: 0.5 },
+}
+
+const CARDIO_ORDER: EditField[] = ['reps', 'speedKmh', 'inclinePct', 'distanceKm']
+
+const editing = ref<{ setId: string; field: EditField } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
 const gearFor = ref<WorkoutGroup | null>(null)
@@ -205,18 +218,18 @@ function swapExercise(exerciseId: string, picked?: Exercise) {
   const current = data.value.exercises.find((item) => item.id === group.exerciseId)
   const bodyweight = Boolean(exercise?.bodyweight)
   const timed = Boolean(exercise?.timed)
+  const cardio = Boolean(exercise?.cardio)
+  const countIn = (item?: Exercise) => (item?.cardio ? 'en minutos' : item?.timed ? 'en segundos' : 'en repeticiones')
 
-  if (timed !== Boolean(current?.timed)) {
+  if (timed !== Boolean(current?.timed) || cardio !== Boolean(current?.cardio)) {
     confirming.value = {
-      title: timed ? 'Pasar a ejercicio por tiempo' : 'Pasar a ejercicio por repeticiones',
-      message: timed
-        ? `${exercise?.name ?? 'El nuevo ejercicio'} se apunta en segundos y ${group.name} en repeticiones, así que lo apuntado no vale para él. Sus series se vaciarán, también las que ya hayas marcado.`
-        : `${exercise?.name ?? 'El nuevo ejercicio'} se apunta en repeticiones y ${group.name} en segundos, así que lo apuntado no vale para él. Sus series se vaciarán, también las que ya hayas marcado.`,
+      title: cardio ? 'Pasar a cardio' : timed ? 'Pasar a ejercicio por tiempo' : 'Pasar a ejercicio por repeticiones',
+      message: `${exercise?.name ?? 'El nuevo ejercicio'} se apunta ${countIn(exercise)} y ${group.name} ${countIn(current)}, así que lo apuntado no vale para él. Sus series se vaciarán, también las que ya hayas marcado.`,
       label: 'Sustituir y vaciar',
       tone: 'accent',
       run: async () => {
         confirming.value = null
-        replaceExercise(group, exerciseId, bodyweight, timed)
+        replaceExercise(group, exerciseId, bodyweight, timed, cardio)
       },
     }
     return
@@ -241,13 +254,16 @@ function swapExercise(exerciseId: string, picked?: Exercise) {
   }
 }
 
-function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: boolean, timed?: boolean) {
+function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: boolean, timed?: boolean, cardio = false) {
   for (const set of group.sets) {
     const target = change(set.id)
     if (!target) continue
     target.exerciseId = exerciseId
     if (resetTo === undefined) continue
-    if (timed !== undefined) Object.assign(target, entryTarget(startingTemplates(timed)[0]))
+    if (timed !== undefined) Object.assign(target, entryTarget(startingTemplates(timed, cardio)[0]))
+    target.speedKmh = null
+    target.inclinePct = null
+    target.distanceKm = null
     const fresh = startingWeight(resetTo, settings.bodyweightKg, undefined, undefined)
     target.weight = fresh.weight
     target.bodyweightKg = fresh.bodyweightKg
@@ -330,6 +346,7 @@ const data = useLive<WorkoutData>(
 
 const nameOf = (id: string) => data.value.exercises.find((item) => item.id === id)?.name ?? '—'
 const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
+const isCardio = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.cardio)
 
 const unsaved = ref<{ previous: Record<string, SetEntry[]>; records: Record<string, number> }>({
   previous: {},
@@ -416,6 +433,7 @@ const groups = computed(() => {
         previous: previousOf(exerciseId),
         record: recordOf(exerciseId),
         timed,
+        cardio: isCardio(exerciseId),
       }
     })
 })
@@ -691,8 +709,37 @@ function addSet(exerciseId: string) {
   save()
 }
 
-function edit(set: SetEntry, field: 'weight' | 'reps') {
+function edit(set: SetEntry, field: EditField) {
   editing.value = { setId: set.id, field }
+}
+
+const editingCardio = computed(() => (editingSet.value ? isCardio(editingSet.value.exerciseId) : false))
+
+const cardioPad = computed(() => {
+  const field = editing.value?.field
+  if (!editingCardio.value || !field || field === 'weight') return null
+  return CARDIO_PADS[field === 'reps' ? 'minutes' : field]
+})
+
+function padValue(set: SetEntry, field: EditField) {
+  if (field === 'reps') {
+    if (!isCardio(set.exerciseId)) return set.reps
+    return set.reps == null ? null : Math.round((set.reps / 60) * 10) / 10
+  }
+  if (field === 'weight') return editingLoad.value ? extraLoad(set) || null : set.weight
+  return set[field] ?? null
+}
+
+const minutesText = (seconds: number | null | undefined) => (seconds == null ? null : minutesLabel(seconds))
+
+function cardioText(set: SetEntry) {
+  const parts = [
+    set.reps != null ? `${minutesLabel(set.reps)} min` : null,
+    set.speedKmh != null ? `${format(set.speedKmh)} km/h` : null,
+    set.inclinePct != null ? `${format(set.inclinePct)} %` : null,
+    set.distanceKm != null ? `${format(set.distanceKm)} km` : null,
+  ]
+  return parts.filter(Boolean).join(' · ')
 }
 
 function commit(value: number | null) {
@@ -701,7 +748,9 @@ function commit(value: number | null) {
   const target = change(set.id)
   if (!target) return
 
-  if (editing.value.field === 'reps') target.reps = value
+  const field = editing.value.field
+  if (field === 'reps') target.reps = value != null && isCardio(set.exerciseId) ? Math.round(value * 60) : value
+  else if (field !== 'weight') target[field] = value
   else if (target.bodyweightKg != null) target.weight = withLoad(target.bodyweightKg, value)
   else target.weight = value
 
@@ -715,6 +764,18 @@ function commitAndAdvance(value: number | null) {
 
   const field = editing.value.field
   commit(value)
+
+  if (group.cardio && field !== 'weight') {
+    const next = CARDIO_ORDER[CARDIO_ORDER.indexOf(field) + 1]
+    if (next) {
+      editing.value = { setId: set.id, field: next }
+      return
+    }
+    const fresh = editingSet.value
+    editing.value = null
+    if (fresh?.reps != null && !fresh.done) complete(fresh, fresh.reps, group)
+    return
+  }
 
   if (field === 'reps') {
     const fresh = editingSet.value
@@ -1059,7 +1120,7 @@ async function removeSheet() {
                 </button>
                 <TechniqueTag v-else-if="group.technique" :technique="group.technique" chip />
                 <button
-                  v-else-if="!readonly"
+                  v-else-if="!readonly && !group.cardio"
                   class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
                   type="button"
                   @click.stop="techniqueFor = group"
@@ -1075,7 +1136,7 @@ async function removeSheet() {
                   @click.stop="targetFor = group"
                 >{{ targetSummary(group) }}</button>
                 <button
-                  v-if="!readonly && group.sets.length > 0"
+                  v-if="!readonly && group.sets.length > 0 && !group.cardio"
                   class="flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-medium text-muted"
                   :class="hasGear(group) ? 'border-line-btn' : 'border-dashed border-line-btn'"
                   type="button"
@@ -1098,7 +1159,82 @@ async function removeSheet() {
                 >BW {{ format(bodyweightOf(group) ?? 0) }} kg</button>
               </div>
 
+              <template v-if="group.cardio">
+                <div
+                  class="grid gap-1.5 pl-3.5 pr-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint"
+                  style="grid-template-columns: 30px repeat(4, minmax(0, 1fr)) 56px"
+                >
+                  <span />
+                  <span class="text-center">Min</span>
+                  <span class="text-center">km/h</span>
+                  <span class="text-center">Incl.</span>
+                  <span class="text-center">km</span>
+                  <span class="text-center">✓</span>
+                </div>
+
+                <div
+                  v-for="set in group.sets"
+                  :key="set.id"
+                  class="flex flex-col gap-1 rounded-2xl border pl-3.5 pr-2"
+                  :class="set.done
+                    ? 'border-ok-line bg-ok-soft'
+                    : set.id === currentGroup?.sets.find((candidate) => !candidate.done)?.id
+                      ? 'border-accent bg-surface'
+                      : 'border-line bg-surface'"
+                >
+                  <div class="grid items-center gap-1.5" style="grid-template-columns: 30px repeat(4, minmax(0, 1fr)) 56px; min-height: 60px">
+                    <div class="flex flex-col gap-px py-2">
+                      <span class="num text-[15px] font-semibold">{{ set.index }}</span>
+                    </div>
+
+                    <component
+                      :is="readonly ? 'span' : 'button'"
+                      v-for="field in (['reps', 'speedKmh', 'inclinePct', 'distanceKm'] as const)"
+                      :key="field"
+                      class="num flex h-11 min-w-0 flex-col items-center justify-center rounded-xl border"
+                      :class="editing?.setId === set.id && editing?.field === field
+                        ? 'border-accent bg-app'
+                        : set.done
+                          ? 'border-transparent bg-transparent'
+                          : 'border-line-btn bg-app'"
+                      :type="readonly ? null : 'button'"
+                      @click.stop="!readonly && edit(set, field)"
+                    >
+                      <span
+                        v-if="field === 'reps'"
+                        class="max-w-full truncate px-1 font-semibold"
+                        :class="set.reps != null ? 'text-[17px]' : 'text-[14px] text-dim'"
+                      >{{ minutesText(set.reps) ?? minutesText(minReps(targetOf(set))) ?? '—' }}</span>
+                      <span
+                        v-else
+                        class="max-w-full truncate px-1 font-semibold"
+                        :class="set[field] != null ? 'text-[17px]' : 'text-[14px] text-dim'"
+                      >{{ set[field] == null ? '—' : format(set[field] ?? 0) }}</span>
+                    </component>
+
+                    <component
+                      :is="readonly ? 'span' : 'button'"
+                      class="flex h-14 w-14 items-center justify-center"
+                      :type="readonly ? null : 'button'"
+                      @click.stop="!readonly && toggle(set, group)"
+                    >
+                      <span
+                        class="flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
+                        :class="set.done ? 'bg-ok text-ok-ink' : 'border border-line-btn bg-surface-2 text-icon'"
+                      >
+                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7" /></svg>
+                      </span>
+                    </component>
+                  </div>
+                  <span
+                    v-if="group.previous[set.index - 1] ?? group.previous[group.previous.length - 1]"
+                    class="num pb-2 text-[11px] text-dim"
+                  >Anterior: {{ cardioText(group.previous[set.index - 1] ?? group.previous[group.previous.length - 1]) }}</span>
+                </div>
+              </template>
+
               <div
+                v-else
                 class="grid gap-1.5 pl-3.5 pr-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint"
                 style="grid-template-columns: 46px 1fr 58px 58px 56px"
               >
@@ -1109,7 +1245,7 @@ async function removeSheet() {
                 <span class="text-center">✓</span>
               </div>
 
-              <template v-for="set in group.sets" :key="set.id">
+              <template v-for="set in (group.cardio ? [] : group.sets)" :key="set.id">
             <div
               class="grid items-center gap-1.5 rounded-2xl border pl-3.5 pr-2"
               :class="group.recordIds.has(set.id)
@@ -1334,10 +1470,13 @@ async function removeSheet() {
 
     <NumberPad
       v-else-if="editingSet && editing"
-      :field="editing.field"
-      :value="editing.field === 'reps' ? editingSet.reps : editingLoad ? extraLoad(editingSet) || null : editingSet.weight"
+      :key="`${editingSet.id}-${editing.field}`"
+      :field="cardioPad || editing.field !== 'reps' ? 'weight' : 'reps'"
+      :value="padValue(editingSet, editing.field)"
       :context="`${editingGroup?.name ?? ''} · serie ${editingSet.index}`"
-      :label="editingLoad ? 'Lastre' : undefined"
+      :label="cardioPad?.label ?? (editingLoad ? 'Lastre' : undefined)"
+      :unit="cardioPad?.unit"
+      :step-kg="cardioPad?.step"
       :hint="editingGroup?.previous[editingSet.index - 1]?.reps ?? null"
       :timed="editing.field === 'reps' && isTimed(editingSet.exerciseId)"
       @commit="commit"
@@ -1389,6 +1528,7 @@ async function removeSheet() {
       :sets="targetFor.sets.map(templateOf)"
       :exercise-name="targetFor.name"
       :timed="targetFor.timed"
+      :cardio="targetFor.cardio"
       subtitle="Solo para esta hoja: la rutina no cambia"
       @apply="applyTarget"
       @close="targetFor = null"
@@ -1398,7 +1538,7 @@ async function removeSheet() {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: creating, group: '', bodyweight: false, timed: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />
