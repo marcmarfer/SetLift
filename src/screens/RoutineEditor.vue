@@ -236,9 +236,15 @@ async function swapExercise(exerciseId: string, picked?: Exercise) {
         sets: retimed(item.sets, timed, cardio),
         ...(item.upcoming ? { upcoming: item.upcoming.map((plan) => ({ ...plan, sets: retimed(plan.sets, timed, cardio) })) } : {}),
       }
+  const withoutTechnique = cardio
+    ? {
+        technique: undefined,
+        ...(source.upcoming ? { upcoming: source.upcoming.map((plan) => ({ ...plan, technique: undefined })) } : {}),
+      }
+    : {}
 
   if (bodyweight === isBodyweight(item.exerciseId)) {
-    await replace(index, { exerciseId, sets: source.sets, ...(source.upcoming ? { upcoming: source.upcoming } : {}) })
+    await replace(index, { exerciseId, sets: source.sets, ...(source.upcoming ? { upcoming: source.upcoming } : {}), ...withoutTechnique })
     return
   }
 
@@ -255,6 +261,7 @@ async function swapExercise(exerciseId: string, picked?: Exercise) {
         exerciseId,
         sets: withoutWeights(source.sets),
         ...(source.upcoming ? { upcoming: source.upcoming.map((plan) => ({ ...plan, sets: withoutWeights(plan.sets) })) } : {}),
+        ...withoutTechnique,
       })
     },
   }
@@ -630,6 +637,7 @@ function restLabel(item: RoutineExercise) {
               </div>
 
               <button
+                v-if="!isCardio(item.exerciseId)"
                 class="flex h-12 items-center gap-2.5 border-t border-line text-left"
                 type="button"
                 @click="techniqueFor = Number(index)"

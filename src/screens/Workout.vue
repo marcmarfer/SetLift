@@ -264,6 +264,7 @@ function replaceExercise(group: WorkoutGroup, exerciseId: string, resetTo?: bool
     target.speedKmh = null
     target.inclinePct = null
     target.distanceKm = null
+    if (cardio) target.technique = null
     const fresh = startingWeight(resetTo, settings.bodyweightKg, undefined, undefined)
     target.weight = fresh.weight
     target.bodyweightKg = fresh.bodyweightKg
@@ -426,7 +427,7 @@ const groups = computed(() => {
         name: nameOf(exerciseId),
         restSec: template?.restSec ?? null,
         increment: template?.incrementKg ?? 2.5,
-        technique: sets[0].technique?.trim() || null,
+        technique: isCardio(exerciseId) ? null : sets[0].technique?.trim() || null,
         sets,
         done: sets.filter((set) => set.done).length,
         total: sets.length,
@@ -730,6 +731,13 @@ function padValue(set: SetEntry, field: EditField) {
   return set[field] ?? null
 }
 
+function fillDistance(setId: string) {
+  const target = change(setId)
+  if (!target || target.distanceKm != null || target.reps == null || target.speedKmh == null) return
+  target.distanceKm = Math.round(((target.speedKmh * target.reps) / 3600) * 100) / 100
+  save()
+}
+
 const minutesText = (seconds: number | null | undefined) => (seconds == null ? null : minutesLabel(seconds))
 
 function cardioText(set: SetEntry) {
@@ -767,6 +775,7 @@ function commitAndAdvance(value: number | null) {
 
   if (group.cardio && field !== 'weight') {
     const next = CARDIO_ORDER[CARDIO_ORDER.indexOf(field) + 1]
+    if (next === 'distanceKm') fillDistance(set.id)
     if (next) {
       editing.value = { setId: set.id, field: next }
       return
