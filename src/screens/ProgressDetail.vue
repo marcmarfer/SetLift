@@ -263,14 +263,18 @@ const records = computed(() => {
 
   return [...byWeight.entries()]
     .sort((a, b) => b[0] - a[0])
-    .slice(0, RECORD_ROWS)
-    .map(([weight, set]) => ({
+    .map(([weight, set], spot) => ({
       weight,
+      heaviest: spot === 0,
       reps: set.reps ?? 0,
       date: dateFor(set) || null,
       best: bestSet.value?.weight === weight && bestSet.value.reps === set.reps,
     }))
 })
+
+const everyRecord = ref(false)
+
+const shownRecords = computed(() => (everyRecord.value ? records.value : records.value.slice(0, RECORD_ROWS)))
 
 const bestSet = computed(() => {
   if (byCount.value) return null
@@ -424,11 +428,11 @@ const format = (value: number) => String(value).replace('.', ',')
 
       <section v-if="!timed" class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
         <span class="flex h-[38px] items-center text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Más repeticiones con cada peso · histórico
+          Récords · tu máximo de reps con cada peso
         </span>
         <p v-if="records.length === 0" class="border-t border-line py-3 text-[13px] text-dim">Aún no hay series.</p>
         <div
-          v-for="record in records"
+          v-for="record in shownRecords"
           :key="record.weight"
           class="flex h-11 items-center gap-2.5 border-t border-line"
         >
@@ -438,11 +442,21 @@ const format = (value: number) => String(value).replace('.', ',')
           <span
             v-if="record.best"
             class="flex h-5.5 items-center rounded-md bg-accent px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-hero-ink"
-          >Mejor</span>
+          >Mejor serie</span>
+          <span
+            v-if="record.heaviest && records.length > 1"
+            class="flex h-5.5 items-center rounded-md bg-surface-2 px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted"
+          >Más peso</span>
           <span v-if="record.date" class="num text-xs text-faint">
             {{ shortDay(record.date) }} {{ monthName(record.date).slice(0, 3) }}
           </span>
         </div>
+        <button
+          v-if="records.length > RECORD_ROWS"
+          class="flex h-11 items-center justify-center border-t border-line text-[13px] font-medium text-muted"
+          type="button"
+          @click="everyRecord = !everyRecord"
+        >{{ everyRecord ? 'Ver menos' : `Ver los ${records.length} pesos` }}</button>
       </section>
     </div>
 
