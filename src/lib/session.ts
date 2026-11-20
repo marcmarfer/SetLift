@@ -60,6 +60,48 @@ export async function bestOneRepMax(exerciseId: string, excludeSessionId?: strin
     .reduce((best, set) => Math.max(best, estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)), 0)
 }
 
+export interface ExerciseHighlights {
+  previousDate: string | null
+  best: { set: SetEntry; date: string } | null
+  single: { weight: number; date: string | null } | null
+}
+
+export async function exerciseHighlights(
+  exerciseId: string,
+  excludeSessionId?: string,
+  before?: string,
+): Promise<ExerciseHighlights> {
+  const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
+  const sheets = await sheetsOf(sets)
+  const counts = countsBefore(sheets, before)
+  const done = sets.filter((set) => set.done && set.reps && set.sessionId !== excludeSessionId && counts(set.sessionId))
+  const dateOf = (set: SetEntry) => sheets.get(set.sessionId)?.date ?? ''
+
+  const latest = done.reduce<SetEntry | null>((last, set) => (!last || dateOf(set) > dateOf(last) ? set : last), null)
+  const scoreOf = (set: SetEntry) => estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+  const best = done.reduce<SetEntry | null>((top, set) => {
+    if (!top) return set
+    const gap = scoreOf(set) - scoreOf(top)
+    return gap > 0 || (gap === 0 && dateOf(set) > dateOf(top)) ? set : top
+  }, null)
+
+  const heaviest = done
+    .filter((set) => set.reps === 1 && (set.weight ?? 0) > 0)
+    .reduce<SetEntry | null>((top, set) => (!top || (set.weight ?? 0) > (top.weight ?? 0) ? set : top), null)
+  const manual = await db.exercisePreferences.get(exerciseId)
+  const single = manual?.manualOneRepMaxKg
+    ? { weight: manual.manualOneRepMaxKg, date: manual.manualOneRepMaxDate ?? null }
+    : heaviest
+      ? { weight: heaviest.weight ?? 0, date: dateOf(heaviest) }
+      : null
+
+  return {
+    previousDate: latest ? dateOf(latest) : null,
+    best: best && scoreOf(best) > 0 ? { set: best, date: dateOf(best) } : null,
+    single,
+  }
+}
+
 function entryFrom(
   sessionId: string,
   exerciseId: string,

@@ -5,10 +5,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { db, newId, plain } from '../db'
 import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
-import { longDay, shortDay, today } from '../lib/dates'
+import { longDay, shortDate, shortDay, today } from '../lib/dates'
 import { estimateOneRepMax } from '../lib/progress'
-import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
+import { bestOneRepMax, discardIfBlank, exerciseHighlights, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
+import type { ExerciseHighlights } from '../lib/session'
 import { effortLabel, effortOf, entryTarget, minReps, minutesLabel, repsLabel, repsOf, shortLabel, startingTemplates, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
@@ -46,6 +47,7 @@ interface WorkoutGroup {
   total: number
   previous: SetEntry[]
   record: number
+  highlights: ExerciseHighlights | null
   timed: boolean
   cardio: boolean
 }
@@ -285,6 +287,7 @@ interface WorkoutData {
   sets: SetEntry[]
   previous: Record<string, SetEntry[]>
   records: Record<string, number>
+  highlights: Record<string, ExerciseHighlights>
   marks: Record<string, string[]>
   pending: Record<string, string[]>
 }
@@ -293,7 +296,7 @@ const data = useLive<WorkoutData>(
   async () => {
     const session = (await db.sessions.get(sessionId.value)) ?? null
     if (!session) {
-      return { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} }
+      return { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, highlights: {}, marks: {}, pending: {} }
     }
 
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
@@ -303,10 +306,12 @@ const data = useLive<WorkoutData>(
     const ids = [...new Set(sets.map((set) => set.exerciseId))]
     const previous: Record<string, SetEntry[]> = {}
     const records: Record<string, number> = {}
+    const highlights: Record<string, ExerciseHighlights> = {}
 
     for (const id of ids) {
       previous[id] = await previousSession(id, session.id, session.date)
       records[id] = await bestOneRepMax(id, session.id, session.date)
+      highlights[id] = await exerciseHighlights(id, session.id, session.date)
     }
 
     const everySession = await db.sessions.toArray()
@@ -339,9 +344,9 @@ const data = useLive<WorkoutData>(
 
     const blueprint = routine ? blueprintOf(routine, everySession, session.id) : []
 
-    return { session, routine, blueprint, exercises, sets, previous, records, marks, pending }
+    return { session, routine, blueprint, exercises, sets, previous, records, highlights, marks, pending }
   },
-  { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} },
+  { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, highlights: {}, marks: {}, pending: {} },
   sessionId,
 )
 
@@ -349,9 +354,14 @@ const nameOf = (id: string) => data.value.exercises.find((item) => item.id === i
 const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
 const isCardio = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.cardio)
 
-const unsaved = ref<{ previous: Record<string, SetEntry[]>; records: Record<string, number> }>({
+const unsaved = ref<{
+  previous: Record<string, SetEntry[]>
+  records: Record<string, number>
+  highlights: Record<string, ExerciseHighlights>
+}>({
   previous: {},
   records: {},
+  highlights: {},
 })
 
 watch(
@@ -366,19 +376,22 @@ watch(
       if (id in unsaved.value.previous) continue
       const previous = await previousSession(id, session.id, session.date)
       const record = await bestOneRepMax(id, session.id, session.date)
+      const highlights = await exerciseHighlights(id, session.id, session.date)
       unsaved.value = {
         previous: { ...unsaved.value.previous, [id]: previous },
         records: { ...unsaved.value.records, [id]: record },
+        highlights: { ...unsaved.value.highlights, [id]: highlights },
       }
     }
   },
   { immediate: true },
 )
 
-watch(sessionId, () => { unsaved.value = { previous: {}, records: {} } })
+watch(sessionId, () => { unsaved.value = { previous: {}, records: {}, highlights: {} } })
 
 const previousOf = (id: string) => data.value.previous[id] ?? unsaved.value.previous[id] ?? []
 const recordOf = (id: string) => data.value.records[id] ?? unsaved.value.records[id] ?? 0
+const highlightsOf = (id: string) => data.value.highlights[id] ?? unsaved.value.highlights[id] ?? null
 
 async function toggleDeload() {
   const session = data.value.session
@@ -433,6 +446,7 @@ const groups = computed(() => {
         total: sets.length,
         previous: previousOf(exerciseId),
         record: recordOf(exerciseId),
+        highlights: highlightsOf(exerciseId),
         timed,
         cardio: isCardio(exerciseId),
       }
@@ -481,10 +495,32 @@ watch(
   { immediate: true },
 )
 
+function previousOfSet(group: { previous: SetEntry[] }, index: number) {
+  return group.previous[index - 1] ?? group.previous[group.previous.length - 1] ?? null
+}
+
+function setText(set: SetEntry) {
+  return `${weightLabel(set, format) ?? format(set.weight ?? 0)} × ${set.reps}`
+}
+
 function previousLabel(group: { previous: SetEntry[] }, index: number) {
-  const before = group.previous[index - 1] ?? group.previous[group.previous.length - 1]
+  const before = previousOfSet(group, index)
   if (!before || before.reps == null) return '—'
-  return `${weightLabel(before, format) ?? format(before.weight ?? 0)} × ${before.reps}`
+  return setText(before)
+}
+
+function previousDetail(group: { previous: SetEntry[] }, index: number) {
+  const before = previousOfSet(group, index)
+  if (!before || before.reps == null) return []
+  return [effortLabel(targetOf(before)), gearLabel(before.gear, ', ')].filter(Boolean)
+}
+
+function bestSingle(group: WorkoutGroup) {
+  const single = group.highlights?.single
+  const best = group.highlights?.best?.set
+  if (!single) return null
+  if (best?.reps === 1 && (best.weight ?? 0) >= single.weight) return null
+  return single
 }
 
 function hasBodyweight(group: { sets: SetEntry[] }) {
@@ -1168,6 +1204,22 @@ async function removeSheet() {
                 >BW {{ format(bodyweightOf(group) ?? 0) }} kg</button>
               </div>
 
+              <div
+                v-if="!group.timed && (group.highlights?.best || group.highlights?.previousDate)"
+                class="num flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-[12px] text-sub"
+              >
+                <span v-if="group.highlights?.best" class="order-1 flex items-center gap-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="text-accent">
+                    <path d="M7 4h10v4.5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 2.7" /><path d="M17 6h2.5a2.5 2.5 0 0 1-2.5 2.7" /><path d="M12 13.5V17" /><path d="M8.5 20h7" />
+                  </svg>
+                  <span>Mejor <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b> · {{ shortDate(group.highlights.best.date) }}</span>
+                </span>
+                <span v-if="group.highlights?.previousDate" class="order-3">Anterior · {{ shortDate(group.highlights.previousDate) }}</span>
+                <span v-if="bestSingle(group)" class="order-2">
+                  1RM <b class="font-semibold text-ink">{{ format(bestSingle(group)!.weight) }} kg</b><template v-if="bestSingle(group)!.date"> · {{ shortDate(bestSingle(group)!.date!) }}</template>
+                </span>
+              </div>
+
               <template v-if="group.cardio">
                 <div
                   class="grid gap-1.5 pl-3.5 pr-2 text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint"
@@ -1283,6 +1335,11 @@ async function removeSheet() {
 
               <div class="flex min-w-0 flex-col gap-0.5">
                 <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
+                <span
+                  v-for="detail in previousDetail(group, set.index)"
+                  :key="detail"
+                  class="num text-[10px] leading-tight text-dim"
+                >{{ detail }}</span>
                 <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="text-[10px] font-medium leading-tight text-accent-ink">{{ gearLabel(set.gear, ', ') }}</span>
               </div>
 
