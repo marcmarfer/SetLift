@@ -38,7 +38,7 @@ const ranges = [
   { label: 'Todo', days: null },
 ]
 
-const repTargets = [1, 3, 5, 8, 10, 12]
+const RECORD_ROWS = 6
 
 interface DetailData {
   exercise: Exercise | null
@@ -250,21 +250,43 @@ async function clearOneRepMax() {
   editingOneRepMax.value = false
 }
 
-const records = computed(() =>
-  repTargets.map((reps) => {
-    const candidates = data.value.sets.filter((set) => set.reps === reps)
-    if (candidates.length === 0) return { reps, weight: null, date: null }
+const records = computed(() => {
+  const byWeight = new Map<number, SetEntry>()
+  const dateFor = (set: SetEntry) => dateOf.value.get(set.sessionId) ?? ''
 
-    const best = candidates.reduce((a, b) => {
-      const weightA = a.weight ?? 0
-      const weightB = b.weight ?? 0
-      if (weightA !== weightB) return weightB > weightA ? b : a
-      return (dateOf.value.get(b.sessionId) ?? '') > (dateOf.value.get(a.sessionId) ?? '') ? b : a
-    })
+  for (const set of data.value.sets) {
+    const weight = set.weight ?? 0
+    const top = byWeight.get(weight)
+    const more = (set.reps ?? 0) - (top?.reps ?? 0)
+    if (!top || more > 0 || (more === 0 && dateFor(set) > dateFor(top))) byWeight.set(weight, set)
+  }
 
-    return { reps, weight: best.weight ?? 0, date: dateOf.value.get(best.sessionId) ?? null }
-  }),
-)
+  return [...byWeight.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, RECORD_ROWS)
+    .map(([weight, set]) => ({
+      weight,
+      reps: set.reps ?? 0,
+      date: dateFor(set) || null,
+      best: bestSet.value?.weight === weight && bestSet.value.reps === set.reps,
+    }))
+})
+
+const bestSet = computed(() => {
+  if (byCount.value) return null
+  const scoreOf = (set: SetEntry) => estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+  const best = data.value.sets.reduce<SetEntry | null>((top, set) => {
+    if (!top) return set
+    const gap = scoreOf(set) - scoreOf(top)
+    const later = (dateOf.value.get(set.sessionId) ?? '') > (dateOf.value.get(top.sessionId) ?? '')
+    return gap > 0 || (gap === 0 && later) ? set : top
+  }, null)
+  if (!best || scoreOf(best) <= 0) return null
+  return { weight: best.weight ?? 0, reps: best.reps ?? 0, date: dateOf.value.get(best.sessionId) ?? null }
+})
+
+const loadLabel = (weight: number) =>
+  weight === 0 && data.value.exercise?.bodyweight ? 'BW' : `${format(weight)} kg`
 
 const format = (value: number) => String(value).replace('.', ',')
 </script>
@@ -402,17 +424,21 @@ const format = (value: number) => String(value).replace('.', ',')
 
       <section v-if="!timed" class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
         <span class="flex h-[38px] items-center text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Récords por repeticiones · histórico
+          Más repeticiones con cada peso · histórico
         </span>
+        <p v-if="records.length === 0" class="border-t border-line py-3 text-[13px] text-dim">Aún no hay series.</p>
         <div
           v-for="record in records"
-          :key="record.reps"
+          :key="record.weight"
           class="flex h-11 items-center gap-2.5 border-t border-line"
         >
-          <span class="num w-14 text-[13px] text-muted">{{ record.reps }} {{ record.reps === 1 ? 'rep' : 'reps' }}</span>
           <span class="num flex-grow text-[15px] font-semibold">
-            {{ record.weight == null ? '—' : record.weight === 0 ? 'BW' : `${format(record.weight)} kg` }}
+            {{ loadLabel(record.weight) }} × {{ record.reps }}
           </span>
+          <span
+            v-if="record.best"
+            class="flex h-5.5 items-center rounded-md bg-accent px-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-hero-ink"
+          >Mejor</span>
           <span v-if="record.date" class="num text-xs text-faint">
             {{ shortDay(record.date) }} {{ monthName(record.date).slice(0, 3) }}
           </span>
