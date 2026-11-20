@@ -1206,16 +1206,22 @@ async function removeSheet() {
 
               <div
                 v-if="!group.timed && (group.highlights?.best || bestSingle(group))"
-                class="num flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-[12px] text-sub"
+                class="num flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1 py-1.5 text-[12.5px] text-sub"
               >
-                <span v-if="group.highlights?.best" class="flex items-center gap-1">
+                <span v-if="group.highlights?.best" class="flex items-center gap-1.5">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="text-accent">
                     <path d="M7 4h10v4.5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 2.7" /><path d="M17 6h2.5a2.5 2.5 0 0 1-2.5 2.7" /><path d="M12 13.5V17" /><path d="M8.5 20h7" />
                   </svg>
-                  <span>Mejor <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b> · {{ shortDate(group.highlights.best.date) }}</span>
+                  <span class="flex items-baseline gap-1.5">
+                    <span>Mejor</span>
+                    <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b>
+                    <span class="text-dim">{{ shortDate(group.highlights.best.date) }}</span>
+                  </span>
                 </span>
-                <span v-if="bestSingle(group)">
-                  1RM <b class="font-semibold text-ink">{{ format(bestSingle(group)!.weight) }} kg</b><template v-if="bestSingle(group)!.date"> · {{ shortDate(bestSingle(group)!.date!) }}</template>
+                <span v-if="bestSingle(group)" class="flex items-baseline gap-1.5">
+                  <span>1RM</span>
+                  <b class="font-semibold text-ink">{{ format(bestSingle(group)!.weight) }} kg</b>
+                  <span v-if="bestSingle(group)!.date" class="text-dim">{{ shortDate(bestSingle(group)!.date!) }}</span>
                 </span>
               </div>
 
@@ -1332,12 +1338,12 @@ async function removeSheet() {
                 >{{ effortLabel(targetOf(set)) }}</span>
               </div>
 
-              <div class="flex min-w-0 flex-col gap-0.5">
-                <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
+              <div class="flex min-w-0 flex-col gap-1 py-2.5">
+                <span class="num text-[13px] leading-tight text-sub">{{ previousLabel(group, set.index) }}</span>
                 <span
                   v-for="detail in previousDetail(group, set.index)"
                   :key="detail"
-                  class="num text-[10px] leading-tight text-dim"
+                  class="num text-[11px] leading-tight text-dim"
                 >{{ detail }}</span>
                 <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="text-[10px] font-medium leading-tight text-accent-ink">{{ gearLabel(set.gear, ', ') }}</span>
               </div>
