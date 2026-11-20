@@ -61,7 +61,6 @@ export async function bestOneRepMax(exerciseId: string, excludeSessionId?: strin
 }
 
 export interface ExerciseHighlights {
-  previousDate: string | null
   best: { set: SetEntry; date: string } | null
   single: { weight: number; date: string | null } | null
 }
@@ -77,7 +76,6 @@ export async function exerciseHighlights(
   const done = sets.filter((set) => set.done && set.reps && set.sessionId !== excludeSessionId && counts(set.sessionId))
   const dateOf = (set: SetEntry) => sheets.get(set.sessionId)?.date ?? ''
 
-  const latest = done.reduce<SetEntry | null>((last, set) => (!last || dateOf(set) > dateOf(last) ? set : last), null)
   const scoreOf = (set: SetEntry) => estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
   const best = done.reduce<SetEntry | null>((top, set) => {
     if (!top) return set
@@ -96,7 +94,6 @@ export async function exerciseHighlights(
       : null
 
   return {
-    previousDate: latest ? dateOf(latest) : null,
     best: best && scoreOf(best) > 0 ? { set: best, date: dateOf(best) } : null,
     single,
   }

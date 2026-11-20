@@ -1205,17 +1205,16 @@ async function removeSheet() {
               </div>
 
               <div
-                v-if="!group.timed && (group.highlights?.best || group.highlights?.previousDate)"
+                v-if="!group.timed && (group.highlights?.best || bestSingle(group))"
                 class="num flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-[12px] text-sub"
               >
-                <span v-if="group.highlights?.best" class="order-1 flex items-center gap-1">
+                <span v-if="group.highlights?.best" class="flex items-center gap-1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="text-accent">
                     <path d="M7 4h10v4.5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 2.7" /><path d="M17 6h2.5a2.5 2.5 0 0 1-2.5 2.7" /><path d="M12 13.5V17" /><path d="M8.5 20h7" />
                   </svg>
                   <span>Mejor <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b> · {{ shortDate(group.highlights.best.date) }}</span>
                 </span>
-                <span v-if="group.highlights?.previousDate" class="order-3">Anterior · {{ shortDate(group.highlights.previousDate) }}</span>
-                <span v-if="bestSingle(group)" class="order-2">
+                <span v-if="bestSingle(group)">
                   1RM <b class="font-semibold text-ink">{{ format(bestSingle(group)!.weight) }} kg</b><template v-if="bestSingle(group)!.date"> · {{ shortDate(bestSingle(group)!.date!) }}</template>
                 </span>
               </div>
