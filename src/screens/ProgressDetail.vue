@@ -436,7 +436,7 @@ const format = (value: number) => String(value).replace('.', ',')
       </button>
 
       <button
-        v-if="!byCount"
+        v-if="!byCount && machineKg"
         class="flex min-h-13 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5 py-2.5 text-left"
         type="button"
         @click="editingMachine = true"
@@ -446,11 +446,9 @@ const format = (value: number) => String(value).replace('.', ',')
         </svg>
         <span class="flex flex-grow flex-col gap-0.5">
           <span class="text-[14.5px]">Peso de la máquina</span>
-          <span class="text-[11.5px] leading-snug text-faint">Para máquinas y Smith: se suma a tus discos en la gráfica y el 1RM</span>
+          <span class="text-[11.5px] leading-snug text-faint">Se suma a tus discos en la gráfica y el 1RM</span>
         </span>
-        <span class="num shrink-0 text-[14.5px] font-semibold" :class="machineKg ? '' : 'text-dim'">
-          {{ machineKg ? `${format(machineKg)} kg` : 'Añadir' }}
-        </span>
+        <span class="num shrink-0 text-[14.5px] font-semibold">{{ format(machineKg) }} kg</span>
       </button>
 
       <section v-if="!timed" class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
@@ -485,6 +483,16 @@ const format = (value: number) => String(value).replace('.', ',')
           @click="everyRecord = !everyRecord"
         >{{ everyRecord ? 'Ver menos' : `Ver los ${records.length} pesos` }}</button>
       </section>
+
+      <button
+        v-if="!byCount && !machineKg"
+        class="flex h-11 items-center justify-center gap-1.5 text-[13px] font-medium text-dim"
+        type="button"
+        @click="editingMachine = true"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+        Peso de la máquina (máquinas de discos y Smith)
+      </button>
     </div>
 
     <ExerciseSheet

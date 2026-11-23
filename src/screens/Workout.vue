@@ -1122,6 +1122,14 @@ async function removeSheet() {
               </div>
             </button>
             <button
+              class="flex h-10 w-10 items-center justify-center rounded-xl text-muted"
+              type="button"
+              aria-label="Ver el progreso del ejercicio"
+              @click="router.push(`/progress/${group.exerciseId}`)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5" /><path d="M4 19h16" /><path d="M7.5 14.5l3.5-4 3 2.5 4.5-6" /></svg>
+            </button>
+            <button
               v-if="!readonly"
               class="flex h-10 w-10 items-center justify-center rounded-xl text-muted"
               type="button"
