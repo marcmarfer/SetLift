@@ -34,7 +34,7 @@ export async function saveMachineWeight(exerciseId: string, weight: number | nul
   await db.exercisePreferences.put({
     ...current,
     id: exerciseId,
-    machineWeightKg: weight && weight > 0 ? weight : undefined,
+    machineWeightKg: weight && weight > 0 ? weight : 0,
     updatedAt: now(),
   })
 }

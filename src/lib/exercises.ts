@@ -22,7 +22,7 @@ export async function createExercise(draft: ExerciseDraft, ownerId: string) {
     bodyweight: draft.bodyweight,
     timed: draft.timed || draft.cardio,
     cardio: draft.cardio,
-    plateLoaded: draft.plateLoaded && !draft.cardio && !draft.bodyweight ? true : undefined,
+    plateLoaded: Boolean(draft.plateLoaded && !draft.cardio && !draft.bodyweight),
     updatedAt: Date.now(),
   }
   await db.exercises.put(exercise)
@@ -36,7 +36,7 @@ export async function updateExercise(id: string, draft: ExerciseDraft) {
     bodyweight: draft.bodyweight,
     timed: draft.timed || draft.cardio,
     cardio: draft.cardio,
-    plateLoaded: draft.plateLoaded && !draft.cardio && !draft.bodyweight ? true : undefined,
+    plateLoaded: Boolean(draft.plateLoaded && !draft.cardio && !draft.bodyweight),
     updatedAt: Date.now(),
   })
 }
