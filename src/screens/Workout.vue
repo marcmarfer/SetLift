@@ -1220,10 +1220,11 @@ async function removeSheet() {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="text-accent">
                     <path d="M7 4h10v4.5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 2.7" /><path d="M17 6h2.5a2.5 2.5 0 0 1-2.5 2.7" /><path d="M12 13.5V17" /><path d="M8.5 20h7" />
                   </svg>
-                  <span class="flex items-baseline gap-1.5">
+                  <span class="flex flex-wrap items-baseline gap-x-1.5">
                     <span>Mejor</span>
                     <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b>
                     <span class="text-dim">{{ shortDate(group.highlights.best.date) }}</span>
+                    <span v-if="gearLabel(group.highlights.best.set.gear)" class="text-dim">· {{ gearLabel(group.highlights.best.set.gear, ', ') }}</span>
                   </span>
                 </span>
                 <span v-if="bestSingle(group)" class="flex items-baseline gap-1.5">
