@@ -65,6 +65,7 @@ export interface ExerciseHighlights {
   best: { set: SetEntry; date: string } | null
   single: { weight: number; date: string | null } | null
   machineKg: number
+  lastNote: { text: string; date: string } | null
 }
 
 export async function exerciseHighlights(
@@ -75,6 +76,9 @@ export async function exerciseHighlights(
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const sheets = await sheetsOf(sets)
   const counts = countsBefore(sheets, before)
+  const noted = [...sheets.values()]
+    .filter((sheet) => sheet.id !== excludeSessionId && (!before || sheet.date < before) && sheet.exerciseNotes?.[exerciseId])
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
   const done = sets.filter((set) => set.done && set.reps && set.sessionId !== excludeSessionId && counts(set.sessionId))
   const dateOf = (set: SetEntry) => sheets.get(set.sessionId)?.date ?? ''
 
@@ -100,6 +104,7 @@ export async function exerciseHighlights(
     best: best && scoreOf(best) > 0 ? { set: best, date: dateOf(best) } : null,
     single,
     machineKg,
+    lastNote: noted ? { text: noted.exerciseNotes![exerciseId], date: noted.date } : null,
   }
 }
 

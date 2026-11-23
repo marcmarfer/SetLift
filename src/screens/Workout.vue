@@ -19,6 +19,7 @@ import TechniqueTag from '../components/TechniqueTag.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
 import GearSheet from '../components/GearSheet.vue'
+import NoteSheet from '../components/NoteSheet.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -95,6 +96,7 @@ const editing = ref<{ setId: string; field: EditField } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
 const gearFor = ref<WorkoutGroup | null>(null)
+const noteFor = ref<WorkoutGroup | null>(null)
 const targetFor = ref<WorkoutGroup | null>(null)
 const bodyweightFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
@@ -652,6 +654,20 @@ function applyGear(gear: Gear[], all: boolean, position: number) {
   save()
 }
 
+const noteOf = (exerciseId: string) => data.value.session?.exerciseNotes?.[exerciseId] ?? null
+
+async function applyNote(text: string | null) {
+  const group = noteFor.value
+  const session = data.value.session
+  noteFor.value = null
+  if (!group || !session) return
+
+  const notes = { ...(session.exerciseNotes ?? {}) }
+  if (text) notes[group.exerciseId] = text
+  else delete notes[group.exerciseId]
+  await db.sessions.update(session.id, { exerciseNotes: plain(notes), updatedAt: Date.now() })
+}
+
 const hasGear = (group: WorkoutGroup) => group.sets.some((set) => normalGear(set.gear).length > 0)
 
 function templateOf(set: SetEntry): SetTemplate {
@@ -1204,6 +1220,15 @@ async function removeSheet() {
                   class="flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
                 >{{ gearVaries(group.sets) ? 'Material por serie' : gearLabel(sharedGear(group.sets)) }}</span>
                 <button
+                  v-if="!readonly && !noteOf(group.exerciseId)"
+                  class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  type="button"
+                  @click.stop="noteFor = group"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Nota
+                </button>
+                <button
                   v-if="!readonly && bodyweightOf(group) != null"
                   class="num flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
                   type="button"
@@ -1211,6 +1236,25 @@ async function removeSheet() {
                   @click.stop="bodyweightFor = group"
                 >BW {{ format(bodyweightOf(group) ?? 0) }} kg</button>
               </div>
+
+              <component
+                :is="readonly ? 'p' : 'button'"
+                v-if="noteOf(group.exerciseId)"
+                class="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2.5 text-left text-[13px] leading-snug"
+                :type="readonly ? null : 'button'"
+                @click.stop="!readonly && (noteFor = group)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-accent"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /></svg>
+                <span>{{ noteOf(group.exerciseId) }}</span>
+              </component>
+
+              <p
+                v-if="group.highlights?.lastNote"
+                class="flex items-start gap-2 px-1 text-[12.5px] leading-snug text-sub"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-faint"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /></svg>
+                <span><span class="num text-dim">{{ shortDate(group.highlights.lastNote.date) }} ·</span> {{ group.highlights.lastNote.text }}</span>
+              </p>
 
               <div
                 v-if="!group.timed && (group.highlights?.best || bestSingle(group))"
@@ -1588,6 +1632,14 @@ async function removeSheet() {
       subtitle="Solo para esta hoja: la rutina no cambia"
       @apply="applyTechnique"
       @close="techniqueFor = null"
+    />
+
+    <NoteSheet
+      v-if="noteFor"
+      :value="noteOf(noteFor.exerciseId)"
+      :exercise-name="noteFor.name"
+      @apply="applyNote"
+      @close="noteFor = null"
     />
 
     <GearSheet

@@ -120,6 +120,7 @@ export interface Session {
   deloadByWeek?: boolean
   name?: string
   note?: string
+  exerciseNotes?: Record<string, string>
   updatedAt: number
 }
 

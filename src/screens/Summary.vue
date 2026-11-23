@@ -275,16 +275,21 @@ const thousands = (value: number) => value.toLocaleString('es-ES')
         <div
           v-for="(line, index) in lines"
           :key="line.id"
-          class="flex h-9 items-center gap-2.5"
+          class="flex flex-col"
           :class="index > 0 ? 'border-t border-line' : ''"
         >
-          <span class="flex-grow truncate text-sm">{{ line.name }}</span>
-          <span class="num text-[13px] text-muted">{{ bestText(line.id, line.best) }}</span>
-          <span
-            v-if="!deload"
-            class="num w-[62px] text-right text-[13px] font-semibold"
-            :class="line.delta.startsWith('↑') ? 'text-accent' : line.delta === '=' ? 'text-dim' : 'text-down'"
-          >{{ line.delta }}</span>
+          <div class="flex h-9 items-center gap-2.5">
+            <span class="flex-grow truncate text-sm">{{ line.name }}</span>
+            <span class="num text-[13px] text-muted">{{ bestText(line.id, line.best) }}</span>
+            <span
+              v-if="!deload"
+              class="num w-[62px] text-right text-[13px] font-semibold"
+              :class="line.delta.startsWith('↑') ? 'text-accent' : line.delta === '=' ? 'text-dim' : 'text-down'"
+            >{{ line.delta }}</span>
+          </div>
+          <p v-if="data.session?.exerciseNotes?.[line.id]" class="pb-2 text-[12.5px] leading-snug text-sub">
+            {{ data.session.exerciseNotes[line.id] }}
+          </p>
         </div>
       </section>
 
