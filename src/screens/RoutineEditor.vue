@@ -912,7 +912,7 @@ function restLabel(item: RoutineExercise) {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="groups"
-      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false, plateLoaded: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

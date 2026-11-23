@@ -76,10 +76,15 @@ export function estimateOneRepMax(weight: number, reps: number): number {
   return weight * (1 + reps / 30)
 }
 
+export function strengthOf(set: Pick<SetEntry, 'weight' | 'reps'>, machineKg = 0): number {
+  return estimateOneRepMax((set.weight ?? 0) + machineKg, set.reps ?? 0)
+}
+
 export function trends(
   exercises: Exercise[],
   sessions: Session[],
   sets: SetEntry[],
+  machines: Record<string, number> = {},
 ): ExerciseTrend[] {
   const dateOf = new Map(
     sessions.filter((session) => !session.deload).map((session) => [session.id, session.date]),
@@ -117,8 +122,9 @@ export function trends(
       if (unit !== 'percent') {
         change = best.reps - previous.reps
       } else {
-        const before = estimateOneRepMax(previous.weight, previous.reps)
-        const now = estimateOneRepMax(best.weight, best.reps)
+        const machine = machines[exercise.id] ?? 0
+        const before = strengthOf(previous, machine)
+        const now = strengthOf(best, machine)
         change = before > 0 ? ((now - before) / before) * 100 : 0
       }
     }

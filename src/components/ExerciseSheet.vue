@@ -40,6 +40,7 @@ const group = ref(props.draft?.group ?? '')
 const bodyweight = ref(props.draft?.bodyweight ?? false)
 const timed = ref(props.draft?.timed ?? false)
 const cardio = ref(props.draft?.cardio ?? false)
+const plateLoaded = ref(props.draft?.plateLoaded ?? false)
 
 function save() {
   if (!name.value.trim() || !group.value.trim()) return
@@ -49,6 +50,7 @@ function save() {
     bodyweight: cardio.value ? false : bodyweight.value,
     timed: cardio.value || timed.value,
     cardio: cardio.value,
+    plateLoaded: plateLoaded.value,
   })
 }
 </script>
@@ -141,6 +143,23 @@ function save() {
         </span>
         <span class="flex h-7 w-12 items-center rounded-full p-0.5 transition-colors" :class="timed ? 'bg-accent' : 'bg-line-btn'">
           <span class="h-6 w-6 rounded-full bg-surface shadow-card transition-transform" :class="timed ? 'translate-x-5' : ''" />
+        </span>
+      </button>
+
+      <button
+        v-if="!cardio && !bodyweight && !timed"
+        class="flex h-14 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5"
+        type="button"
+        role="switch"
+        :aria-checked="plateLoaded"
+        @click="plateLoaded = !plateLoaded"
+      >
+        <span class="flex flex-grow flex-col items-start gap-0.5">
+          <span class="text-[15px] font-semibold">Máquina con peso propio</span>
+          <span class="text-[11.5px] text-faint">Smith, péndulo… apuntas solo los discos</span>
+        </span>
+        <span class="flex h-7 w-12 items-center rounded-full p-0.5 transition-colors" :class="plateLoaded ? 'bg-accent' : 'bg-line-btn'">
+          <span class="h-6 w-6 rounded-full bg-surface shadow-card transition-transform" :class="plateLoaded ? 'translate-x-5' : ''" />
         </span>
       </button>
 

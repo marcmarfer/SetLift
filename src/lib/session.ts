@@ -1,6 +1,6 @@
 import { db, newId } from '../db'
 import { addDays, sameWeek, today, weekStart } from './dates'
-import { estimateOneRepMax, progression } from './progress'
+import { progression, strengthOf } from './progress'
 import { forgetDraft, readDraft } from './draft'
 import { entryTarget, startingTemplates } from './targets'
 import { normalGear, storedGear } from './gear'
@@ -54,10 +54,61 @@ export async function bestOneRepMax(exerciseId: string, excludeSessionId?: strin
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const done = sets.filter((set) => set.done && set.sessionId !== excludeSessionId && set.reps)
   const counts = countsBefore(await sheetsOf(done), before)
+  const machine = (await db.exercisePreferences.get(exerciseId))?.machineWeightKg ?? 0
 
   return done
     .filter((set) => counts(set.sessionId))
-    .reduce((best, set) => Math.max(best, estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)), 0)
+    .reduce((best, set) => Math.max(best, strengthOf(set, machine)), 0)
+}
+
+export interface ExerciseHighlights {
+  best: { set: SetEntry; date: string } | null
+  single: { weight: number; date: string | null } | null
+  machineKg: number
+  lastNote: { text: string; date: string } | null
+}
+
+export async function exerciseHighlights(
+  exerciseId: string,
+  excludeSessionId?: string,
+  before?: string,
+): Promise<ExerciseHighlights> {
+  const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
+  const sheets = await sheetsOf(sets)
+  const counts = countsBefore(sheets, before)
+  const trained = new Set(sets.filter((set) => set.done).map((set) => set.sessionId))
+  const previous = [...sheets.values()]
+    .filter((sheet) => sheet.id !== excludeSessionId && (!before || sheet.date < before))
+    .filter((sheet) => trained.has(sheet.id) || sheet.exerciseNotes?.[exerciseId])
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+  const previousNote = previous?.exerciseNotes?.[exerciseId]
+  const done = sets.filter((set) => set.done && set.reps && set.sessionId !== excludeSessionId && counts(set.sessionId))
+  const dateOf = (set: SetEntry) => sheets.get(set.sessionId)?.date ?? ''
+
+  const manual = await db.exercisePreferences.get(exerciseId)
+  const machineKg = manual?.machineWeightKg ?? 0
+  const scoreOf = (set: SetEntry) => strengthOf(set, machineKg)
+  const best = done.reduce<SetEntry | null>((top, set) => {
+    if (!top) return set
+    const gap = scoreOf(set) - scoreOf(top)
+    return gap > 0 || (gap === 0 && dateOf(set) > dateOf(top)) ? set : top
+  }, null)
+
+  const heaviest = done
+    .filter((set) => set.reps === 1 && (set.weight ?? 0) > 0)
+    .reduce<SetEntry | null>((top, set) => (!top || (set.weight ?? 0) > (top.weight ?? 0) ? set : top), null)
+  const single = manual?.manualOneRepMaxKg
+    ? { weight: manual.manualOneRepMaxKg, date: manual.manualOneRepMaxDate ?? null }
+    : heaviest
+      ? { weight: heaviest.weight ?? 0, date: dateOf(heaviest) }
+      : null
+
+  return {
+    best: best && scoreOf(best) > 0 ? { set: best, date: dateOf(best) } : null,
+    single,
+    machineKg,
+    lastNote: previous && previousNote ? { text: previousNote, date: previous.date } : null,
+  }
 }
 
 function entryFrom(

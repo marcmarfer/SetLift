@@ -40,6 +40,7 @@ export interface Exercise {
   bodyweight: boolean
   timed?: boolean
   cardio?: boolean
+  plateLoaded?: boolean
   familyId?: string
   variant?: string
   order?: number
@@ -51,6 +52,7 @@ export interface ExercisePreference {
   favorite?: boolean
   manualOneRepMaxKg?: number
   manualOneRepMaxDate?: string
+  machineWeightKg?: number
   updatedAt: number
 }
 
@@ -118,6 +120,7 @@ export interface Session {
   deloadByWeek?: boolean
   name?: string
   note?: string
+  exerciseNotes?: Record<string, string>
   updatedAt: number
 }
 

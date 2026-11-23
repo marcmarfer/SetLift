@@ -5,10 +5,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { db, newId, plain } from '../db'
 import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
-import { longDay, shortDay, today } from '../lib/dates'
-import { estimateOneRepMax } from '../lib/progress'
-import { bestOneRepMax, discardIfBlank, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
+import { longDay, shortDate, shortDay, today } from '../lib/dates'
+import { strengthOf } from '../lib/progress'
+import { bestOneRepMax, discardIfBlank, exerciseHighlights, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
+import type { ExerciseHighlights } from '../lib/session'
 import { effortLabel, effortOf, entryTarget, minReps, minutesLabel, repsLabel, repsOf, shortLabel, startingTemplates, targetOf } from '../lib/targets'
 import { extraLoad, loadText, startingWeight, weightLabel, withLoad } from '../lib/bodyweight'
 import { sameTechnique } from '../lib/technique'
@@ -18,6 +19,7 @@ import TechniqueTag from '../components/TechniqueTag.vue'
 import TechniqueSheet from '../components/TechniqueSheet.vue'
 import SetTargetSheet from '../components/SetTargetSheet.vue'
 import GearSheet from '../components/GearSheet.vue'
+import NoteSheet from '../components/NoteSheet.vue'
 import { createExercise, muscleGroups, type ExerciseDraft } from '../lib/exercises'
 import { useAuthStore } from '../stores/auth'
 import { useRestStore } from '../stores/rest'
@@ -46,6 +48,7 @@ interface WorkoutGroup {
   total: number
   previous: SetEntry[]
   record: number
+  highlights: ExerciseHighlights | null
   timed: boolean
   cardio: boolean
 }
@@ -93,6 +96,7 @@ const editing = ref<{ setId: string; field: EditField } | null>(null)
 const swapping = ref<WorkoutGroup | null>(null)
 const techniqueFor = ref<WorkoutGroup | null>(null)
 const gearFor = ref<WorkoutGroup | null>(null)
+const noteFor = ref<WorkoutGroup | null>(null)
 const targetFor = ref<WorkoutGroup | null>(null)
 const bodyweightFor = ref<WorkoutGroup | null>(null)
 const adding = ref(false)
@@ -285,6 +289,7 @@ interface WorkoutData {
   sets: SetEntry[]
   previous: Record<string, SetEntry[]>
   records: Record<string, number>
+  highlights: Record<string, ExerciseHighlights>
   marks: Record<string, string[]>
   pending: Record<string, string[]>
 }
@@ -293,7 +298,7 @@ const data = useLive<WorkoutData>(
   async () => {
     const session = (await db.sessions.get(sessionId.value)) ?? null
     if (!session) {
-      return { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} }
+      return { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, highlights: {}, marks: {}, pending: {} }
     }
 
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
@@ -303,10 +308,12 @@ const data = useLive<WorkoutData>(
     const ids = [...new Set(sets.map((set) => set.exerciseId))]
     const previous: Record<string, SetEntry[]> = {}
     const records: Record<string, number> = {}
+    const highlights: Record<string, ExerciseHighlights> = {}
 
     for (const id of ids) {
       previous[id] = await previousSession(id, session.id, session.date)
       records[id] = await bestOneRepMax(id, session.id, session.date)
+      highlights[id] = await exerciseHighlights(id, session.id, session.date)
     }
 
     const everySession = await db.sessions.toArray()
@@ -339,9 +346,9 @@ const data = useLive<WorkoutData>(
 
     const blueprint = routine ? blueprintOf(routine, everySession, session.id) : []
 
-    return { session, routine, blueprint, exercises, sets, previous, records, marks, pending }
+    return { session, routine, blueprint, exercises, sets, previous, records, highlights, marks, pending }
   },
-  { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, marks: {}, pending: {} },
+  { session: null, routine: null, blueprint: [], exercises: [], sets: [], previous: {}, records: {}, highlights: {}, marks: {}, pending: {} },
   sessionId,
 )
 
@@ -349,9 +356,14 @@ const nameOf = (id: string) => data.value.exercises.find((item) => item.id === i
 const isTimed = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.timed)
 const isCardio = (id: string) => Boolean(data.value.exercises.find((item) => item.id === id)?.cardio)
 
-const unsaved = ref<{ previous: Record<string, SetEntry[]>; records: Record<string, number> }>({
+const unsaved = ref<{
+  previous: Record<string, SetEntry[]>
+  records: Record<string, number>
+  highlights: Record<string, ExerciseHighlights>
+}>({
   previous: {},
   records: {},
+  highlights: {},
 })
 
 watch(
@@ -366,19 +378,22 @@ watch(
       if (id in unsaved.value.previous) continue
       const previous = await previousSession(id, session.id, session.date)
       const record = await bestOneRepMax(id, session.id, session.date)
+      const highlights = await exerciseHighlights(id, session.id, session.date)
       unsaved.value = {
         previous: { ...unsaved.value.previous, [id]: previous },
         records: { ...unsaved.value.records, [id]: record },
+        highlights: { ...unsaved.value.highlights, [id]: highlights },
       }
     }
   },
   { immediate: true },
 )
 
-watch(sessionId, () => { unsaved.value = { previous: {}, records: {} } })
+watch(sessionId, () => { unsaved.value = { previous: {}, records: {}, highlights: {} } })
 
 const previousOf = (id: string) => data.value.previous[id] ?? unsaved.value.previous[id] ?? []
 const recordOf = (id: string) => data.value.records[id] ?? unsaved.value.records[id] ?? 0
+const highlightsOf = (id: string) => data.value.highlights[id] ?? unsaved.value.highlights[id] ?? null
 
 async function toggleDeload() {
   const session = data.value.session
@@ -415,7 +430,7 @@ const groups = computed(() => {
       const best = current.session?.deload || timed ? 0 : recordOf(exerciseId)
       const recordIds = new Set(
         sets
-          .filter((set) => set.done && set.reps != null && best > 0 && estimateOneRepMax(set.weight ?? 0, set.reps) > best)
+          .filter((set) => set.done && set.reps != null && best > 0 && strengthOf(set, highlightsOf(exerciseId)?.machineKg) > best)
           .map((set) => set.id),
       )
 
@@ -433,6 +448,7 @@ const groups = computed(() => {
         total: sets.length,
         previous: previousOf(exerciseId),
         record: recordOf(exerciseId),
+        highlights: highlightsOf(exerciseId),
         timed,
         cardio: isCardio(exerciseId),
       }
@@ -481,10 +497,32 @@ watch(
   { immediate: true },
 )
 
+function previousOfSet(group: { previous: SetEntry[] }, index: number) {
+  return group.previous[index - 1] ?? group.previous[group.previous.length - 1] ?? null
+}
+
+function setText(set: SetEntry) {
+  return `${weightLabel(set, format) ?? format(set.weight ?? 0)} × ${set.reps}`
+}
+
 function previousLabel(group: { previous: SetEntry[] }, index: number) {
-  const before = group.previous[index - 1] ?? group.previous[group.previous.length - 1]
+  const before = previousOfSet(group, index)
   if (!before || before.reps == null) return '—'
-  return `${weightLabel(before, format) ?? format(before.weight ?? 0)} × ${before.reps}`
+  return setText(before)
+}
+
+function previousDetail(group: { previous: SetEntry[] }, index: number) {
+  const before = previousOfSet(group, index)
+  if (!before || before.reps == null) return []
+  return [effortLabel(targetOf(before)), gearLabel(before.gear, ', ')].filter(Boolean)
+}
+
+function bestSingle(group: WorkoutGroup) {
+  const single = group.highlights?.single
+  const best = group.highlights?.best?.set
+  if (!single) return null
+  if (best?.reps === 1 && (best.weight ?? 0) >= single.weight) return null
+  return single
 }
 
 function hasBodyweight(group: { sets: SetEntry[] }) {
@@ -529,11 +567,11 @@ function suggestion(set: SetEntry, group: { increment: number }) {
   return { reps: set.reps, weight: (set.weight ?? 0) + group.increment }
 }
 
-function record(set: SetEntry, group: { recordIds: Set<string>; record: number }) {
+function record(set: SetEntry, group: { recordIds: Set<string>; record: number; highlights: ExerciseHighlights | null }) {
   if (set.type !== 'single' || !set.done || set.reps == null) return null
   if (!group.recordIds.has(set.id)) return null
 
-  const mark = estimateOneRepMax(set.weight ?? 0, set.reps)
+  const mark = strengthOf(set, group.highlights?.machineKg)
   return { mark, gain: Math.round((mark - group.record) * 100) / 100 }
 }
 
@@ -614,6 +652,20 @@ function applyGear(gear: Gear[], all: boolean, position: number) {
     if (target) target.gear = gear.length ? normalGear(gear) : null
   }
   save()
+}
+
+const noteOf = (exerciseId: string) => data.value.session?.exerciseNotes?.[exerciseId] ?? null
+
+async function applyNote(text: string | null) {
+  const group = noteFor.value
+  const session = data.value.session
+  noteFor.value = null
+  if (!group || !session) return
+
+  const notes = { ...(session.exerciseNotes ?? {}) }
+  if (text) notes[group.exerciseId] = text
+  else delete notes[group.exerciseId]
+  await db.sessions.update(session.id, { exerciseNotes: plain(notes), updatedAt: Date.now() })
 }
 
 const hasGear = (group: WorkoutGroup) => group.sets.some((set) => normalGear(set.gear).length > 0)
@@ -1086,6 +1138,14 @@ async function removeSheet() {
               </div>
             </button>
             <button
+              class="flex h-10 w-10 items-center justify-center rounded-xl text-muted"
+              type="button"
+              aria-label="Ver el progreso del ejercicio"
+              @click="router.push(`/progress/${group.exerciseId}`)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5" /><path d="M4 19h16" /><path d="M7.5 14.5l3.5-4 3 2.5 4.5-6" /></svg>
+            </button>
+            <button
               v-if="!readonly"
               class="flex h-10 w-10 items-center justify-center rounded-xl text-muted"
               type="button"
@@ -1160,12 +1220,62 @@ async function removeSheet() {
                   class="flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
                 >{{ gearVaries(group.sets) ? 'Material por serie' : gearLabel(sharedGear(group.sets)) }}</span>
                 <button
+                  v-if="!readonly && !noteOf(group.exerciseId)"
+                  class="flex h-8 items-center gap-1 rounded-full border border-dashed border-line-btn px-3 text-[12.5px] font-medium text-muted"
+                  type="button"
+                  @click.stop="noteFor = group"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Nota
+                </button>
+                <button
                   v-if="!readonly && bodyweightOf(group) != null"
                   class="num flex h-8 items-center rounded-full border border-line-btn px-3 text-[12.5px] font-medium text-muted"
                   type="button"
                   aria-label="Cambiar tu peso corporal de hoy"
                   @click.stop="bodyweightFor = group"
                 >BW {{ format(bodyweightOf(group) ?? 0) }} kg</button>
+              </div>
+
+              <component
+                :is="readonly ? 'p' : 'button'"
+                v-if="noteOf(group.exerciseId)"
+                class="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2.5 text-left text-[13px] leading-snug"
+                :type="readonly ? null : 'button'"
+                @click.stop="!readonly && (noteFor = group)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-accent"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /></svg>
+                <span>{{ noteOf(group.exerciseId) }}</span>
+              </component>
+
+              <p
+                v-if="!readonly && group.highlights?.lastNote"
+                class="flex items-start gap-2 px-1 text-[12.5px] leading-snug text-sub"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-faint"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /></svg>
+                <span><span class="num text-dim">{{ shortDate(group.highlights.lastNote.date) }} ·</span> {{ group.highlights.lastNote.text }}</span>
+              </p>
+
+              <div
+                v-if="!group.timed && (group.highlights?.best || bestSingle(group))"
+                class="num flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1 py-1.5 text-[12.5px] text-sub"
+              >
+                <span v-if="group.highlights?.best" class="flex items-center gap-1.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="text-accent">
+                    <path d="M7 4h10v4.5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 2.7" /><path d="M17 6h2.5a2.5 2.5 0 0 1-2.5 2.7" /><path d="M12 13.5V17" /><path d="M8.5 20h7" />
+                  </svg>
+                  <span class="flex flex-wrap items-baseline gap-x-1.5">
+                    <span>Mejor</span>
+                    <b class="font-semibold text-ink">{{ setText(group.highlights.best.set) }}</b>
+                    <span class="text-dim">{{ shortDate(group.highlights.best.date) }}</span>
+                    <span v-if="gearLabel(group.highlights.best.set.gear)" class="text-dim">· {{ gearLabel(group.highlights.best.set.gear, ', ') }}</span>
+                  </span>
+                </span>
+                <span v-if="bestSingle(group)" class="flex items-baseline gap-1.5">
+                  <span>1RM</span>
+                  <b class="font-semibold text-ink">{{ format(bestSingle(group)!.weight) }} kg</b>
+                  <span v-if="bestSingle(group)!.date" class="text-dim">{{ shortDate(bestSingle(group)!.date!) }}</span>
+                </span>
               </div>
 
               <template v-if="group.cardio">
@@ -1281,8 +1391,13 @@ async function removeSheet() {
                 >{{ effortLabel(targetOf(set)) }}</span>
               </div>
 
-              <div class="flex min-w-0 flex-col gap-0.5">
-                <span class="num text-[13px] text-sub">{{ previousLabel(group, set.index) }}</span>
+              <div class="flex min-w-0 flex-col gap-1 py-2.5">
+                <span class="num text-[13px] leading-tight text-sub">{{ previousLabel(group, set.index) }}</span>
+                <span
+                  v-for="detail in previousDetail(group, set.index)"
+                  :key="detail"
+                  class="num text-[11px] leading-tight text-dim"
+                >{{ detail }}</span>
                 <span v-if="gearVaries(group.sets) && gearLabel(set.gear)" class="text-[10px] font-medium leading-tight text-accent-ink">{{ gearLabel(set.gear, ', ') }}</span>
               </div>
 
@@ -1519,6 +1634,14 @@ async function removeSheet() {
       @close="techniqueFor = null"
     />
 
+    <NoteSheet
+      v-if="noteFor"
+      :value="noteOf(noteFor.exerciseId)"
+      :exercise-name="noteFor.name"
+      @apply="applyNote"
+      @close="noteFor = null"
+    />
+
     <GearSheet
       v-if="gearFor"
       :sets="gearFor.sets.map((set) => set.gear)"
@@ -1547,7 +1670,7 @@ async function removeSheet() {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false, plateLoaded: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

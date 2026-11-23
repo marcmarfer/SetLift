@@ -46,7 +46,15 @@ const data = useLive<ProgressData>(
   { exercises: [], preferences: {}, sessions: [], sets: [] },
 )
 
-const exerciseTrends = computed(() => trends(data.value.exercises, data.value.sessions, data.value.sets))
+const machines = computed(() =>
+  Object.fromEntries(
+    Object.values(data.value.preferences)
+      .filter((item) => item.machineWeightKg)
+      .map((item) => [item.id, item.machineWeightKg!]),
+  ),
+)
+
+const exerciseTrends = computed(() => trends(data.value.exercises, data.value.sessions, data.value.sets, machines.value))
 
 const favorites = computed(() =>
   exerciseTrends.value
