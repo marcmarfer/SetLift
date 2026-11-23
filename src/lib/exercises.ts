@@ -112,3 +112,9 @@ export async function muscleGroups() {
     a.localeCompare(b, 'es'),
   )
 }
+
+const PLATE_LOADED = /smith|multipower|p[ée]ndulo|hack|prensa|palanca/i
+
+export function takesMachineWeight(exercise: Pick<Exercise, 'name' | 'variant'>) {
+  return PLATE_LOADED.test(`${exercise.name} ${exercise.variant ?? ''}`)
+}

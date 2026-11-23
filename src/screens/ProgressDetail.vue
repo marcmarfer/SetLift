@@ -12,6 +12,7 @@ import {
   isMine,
   mergeExercise,
   muscleGroups,
+  takesMachineWeight,
   updateExercise,
   usageOf,
   type ExerciseDraft,
@@ -485,7 +486,7 @@ const format = (value: number) => String(value).replace('.', ',')
       </section>
 
       <button
-        v-if="!byCount && !machineKg"
+        v-if="!byCount && !machineKg && takesMachineWeight(data.exercise)"
         class="flex h-11 items-center justify-center gap-1.5 text-[13px] font-medium text-dim"
         type="button"
         @click="editingMachine = true"
