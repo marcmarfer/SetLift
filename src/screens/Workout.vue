@@ -1249,7 +1249,7 @@ async function removeSheet() {
               </component>
 
               <p
-                v-if="group.highlights?.lastNote"
+                v-if="!readonly && group.highlights?.lastNote"
                 class="flex items-start gap-2 px-1 text-[12.5px] leading-snug text-sub"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-faint"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z" /></svg>
