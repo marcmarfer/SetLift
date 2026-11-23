@@ -40,6 +40,7 @@ export interface Exercise {
   bodyweight: boolean
   timed?: boolean
   cardio?: boolean
+  plateLoaded?: boolean
   familyId?: string
   variant?: string
   order?: number

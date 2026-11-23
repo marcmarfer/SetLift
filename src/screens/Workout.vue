@@ -1617,7 +1617,7 @@ async function removeSheet() {
       v-if="creating !== null"
       title="Nuevo ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false }"
+      :draft="{ name: creating, group: '', bodyweight: false, timed: false, cardio: false, plateLoaded: false }"
       @save="saveNewExercise"
       @close="creating = null"
     />

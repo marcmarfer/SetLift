@@ -12,7 +12,6 @@ import {
   isMine,
   mergeExercise,
   muscleGroups,
-  takesMachineWeight,
   updateExercise,
   usageOf,
   type ExerciseDraft,
@@ -486,7 +485,7 @@ const format = (value: number) => String(value).replace('.', ',')
       </section>
 
       <button
-        v-if="!byCount && !machineKg && takesMachineWeight(data.exercise)"
+        v-if="!byCount && !machineKg && data.exercise.plateLoaded"
         class="flex h-11 items-center justify-center gap-1.5 text-[13px] font-medium text-dim"
         type="button"
         @click="editingMachine = true"
@@ -500,7 +499,7 @@ const format = (value: number) => String(value).replace('.', ',')
       v-if="editing && data.exercise"
       title="Editar ejercicio"
       :groups="exerciseGroups"
-      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight, timed: Boolean(data.exercise.timed), cardio: Boolean(data.exercise.cardio) }"
+      :draft="{ name: data.exercise.name, group: data.exercise.group, bodyweight: data.exercise.bodyweight, timed: Boolean(data.exercise.timed), cardio: Boolean(data.exercise.cardio), plateLoaded: Boolean(data.exercise.plateLoaded) }"
       :usage="usage"
       @save="saveExercise"
       @remove="askRemoval"

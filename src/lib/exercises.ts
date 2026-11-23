@@ -10,6 +10,7 @@ export interface ExerciseDraft {
   bodyweight: boolean
   timed: boolean
   cardio: boolean
+  plateLoaded: boolean
 }
 
 export async function createExercise(draft: ExerciseDraft, ownerId: string) {
@@ -21,6 +22,7 @@ export async function createExercise(draft: ExerciseDraft, ownerId: string) {
     bodyweight: draft.bodyweight,
     timed: draft.timed || draft.cardio,
     cardio: draft.cardio,
+    plateLoaded: draft.plateLoaded && !draft.cardio && !draft.bodyweight ? true : undefined,
     updatedAt: Date.now(),
   }
   await db.exercises.put(exercise)
@@ -34,13 +36,14 @@ export async function updateExercise(id: string, draft: ExerciseDraft) {
     bodyweight: draft.bodyweight,
     timed: draft.timed || draft.cardio,
     cardio: draft.cardio,
+    plateLoaded: draft.plateLoaded && !draft.cardio && !draft.bodyweight ? true : undefined,
     updatedAt: Date.now(),
   })
 }
 
 export async function duplicateExercise(source: Exercise, ownerId: string) {
   return createExercise(
-    { name: `${source.name} (mío)`, group: source.group, bodyweight: source.bodyweight, timed: Boolean(source.timed), cardio: Boolean(source.cardio) },
+    { name: `${source.name} (mío)`, group: source.group, bodyweight: source.bodyweight, timed: Boolean(source.timed), cardio: Boolean(source.cardio), plateLoaded: Boolean(source.plateLoaded) },
     ownerId,
   )
 }
@@ -111,10 +114,4 @@ export async function muscleGroups() {
   return [...new Set(all.map((exercise) => exercise.group).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, 'es'),
   )
-}
-
-const PLATE_LOADED = /smith|multipower|p[ée]ndulo|hack|prensa|palanca/i
-
-export function takesMachineWeight(exercise: Pick<Exercise, 'name' | 'variant'>) {
-  return PLATE_LOADED.test(`${exercise.name} ${exercise.variant ?? ''}`)
 }
