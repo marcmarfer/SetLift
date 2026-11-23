@@ -51,6 +51,7 @@ export interface ExercisePreference {
   favorite?: boolean
   manualOneRepMaxKg?: number
   manualOneRepMaxDate?: string
+  machineWeightKg?: number
   updatedAt: number
 }
 

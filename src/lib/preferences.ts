@@ -29,6 +29,21 @@ export async function saveManualOneRepMax(exerciseId: string, weight: number, da
   })
 }
 
+export async function saveMachineWeight(exerciseId: string, weight: number | null) {
+  const current = await db.exercisePreferences.get(exerciseId)
+  await db.exercisePreferences.put({
+    ...current,
+    id: exerciseId,
+    machineWeightKg: weight && weight > 0 ? weight : undefined,
+    updatedAt: now(),
+  })
+}
+
+export async function machineWeights(): Promise<Record<string, number>> {
+  const all = await db.exercisePreferences.toArray()
+  return Object.fromEntries(all.filter((item) => item.machineWeightKg).map((item) => [item.id, item.machineWeightKg!]))
+}
+
 export async function clearManualOneRepMax(exerciseId: string) {
   const current = await db.exercisePreferences.get(exerciseId)
   if (!current) return

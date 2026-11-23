@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { db } from '../db'
 import { useLive } from '../composables/useLive'
 import { addDays, monthName, shortDate, shortDay, today } from '../lib/dates'
-import { estimateOneRepMax } from '../lib/progress'
-import { clearManualOneRepMax, saveManualOneRepMax, toggleFavorite as favoriteToggle } from '../lib/preferences'
+import { strengthOf } from '../lib/progress'
+import { clearManualOneRepMax, saveMachineWeight, saveManualOneRepMax, toggleFavorite as favoriteToggle } from '../lib/preferences'
 import {
   deleteExercise,
   duplicateExercise,
@@ -23,6 +23,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ExercisePicker from '../components/ExercisePicker.vue'
 import ExerciseSheet from '../components/ExerciseSheet.vue'
 import OneRepMaxSheet from '../components/OneRepMaxSheet.vue'
+import NumberPad from '../components/NumberPad.vue'
 import type { Exercise, ExercisePreference, Session, SetEntry } from '../types'
 
 const route = useRoute()
@@ -68,6 +69,14 @@ const data = useLive<DetailData>(
 const timed = computed(() => Boolean(data.value.exercise?.timed))
 const cardio = computed(() => Boolean(data.value.exercise?.cardio))
 const byCount = computed(() => timed.value || (data.value.exercise?.bodyweight ?? false))
+const machineKg = computed(() => data.value.preference?.machineWeightKg ?? 0)
+const editingMachine = ref(false)
+
+async function saveMachine(weight: number | null) {
+  const exercise = data.value.exercise
+  editingMachine.value = false
+  if (exercise) await saveMachineWeight(exercise.id, weight)
+}
 
 const auth = useAuthStore()
 const mine = computed(() => isMine(data.value.exercise, auth.userId))
@@ -161,7 +170,7 @@ const points = computed(() => {
   for (const set of current.sets) {
     const date = dateOf.value.get(set.sessionId)
     if (!date || date < limit) continue
-    const score = cardio.value ? (set.reps ?? 0) / 60 : byCount.value ? (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+    const score = cardio.value ? (set.reps ?? 0) / 60 : byCount.value ? (set.reps ?? 0) : strengthOf(set, machineKg.value)
     byDate.set(date, Math.max(byDate.get(date) ?? 0, score))
   }
 
@@ -214,7 +223,7 @@ const derivedOneRepMax = computed(() => {
 
   for (const set of data.value.sets) {
     if (set.reps !== 1) continue
-    const weight = set.weight ?? 0
+    const weight = (set.weight ?? 0) + machineKg.value
     const date = dateOf.value.get(set.sessionId)
     if (weight <= 0 || !date) continue
     if (!best || weight > best.weight || (weight === best.weight && date > best.date)) {
@@ -278,7 +287,7 @@ const shownRecords = computed(() => (everyRecord.value ? records.value : records
 
 const bestSet = computed(() => {
   if (byCount.value) return null
-  const scoreOf = (set: SetEntry) => estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+  const scoreOf = (set: SetEntry) => strengthOf(set, machineKg.value)
   const best = data.value.sets.reduce<SetEntry | null>((top, set) => {
     if (!top) return set
     const gap = scoreOf(set) - scoreOf(top)
@@ -426,6 +435,24 @@ const format = (value: number) => String(value).replace('.', ',')
         <span v-if="!mine" class="text-[11.5px] text-faint">El catálogo no se edita</span>
       </button>
 
+      <button
+        v-if="!byCount"
+        class="flex min-h-13 items-center gap-2.5 rounded-2xl border border-line-btn bg-surface-2 px-3.5 py-2.5 text-left"
+        type="button"
+        @click="editingMachine = true"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-muted">
+          <path d="M6 7v10M18 7v10M3 9.5v5M21 9.5v5M6 12h12" />
+        </svg>
+        <span class="flex flex-grow flex-col gap-0.5">
+          <span class="text-[14.5px]">Peso de la máquina</span>
+          <span class="text-[11.5px] leading-snug text-faint">Para máquinas y Smith: se suma a tus discos en la gráfica y el 1RM</span>
+        </span>
+        <span class="num shrink-0 text-[14.5px] font-semibold" :class="machineKg ? '' : 'text-dim'">
+          {{ machineKg ? `${format(machineKg)} kg` : 'Añadir' }}
+        </span>
+      </button>
+
       <section v-if="!timed" class="flex flex-col rounded-[20px] border border-line bg-surface px-3.5 pb-2.5 shadow-card">
         <span class="flex h-[38px] items-center text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Récords · tu máximo de reps con cada peso
@@ -490,6 +517,18 @@ const format = (value: number) => String(value).replace('.', ',')
       @confirm="remove"
       @close="confirmingRemoval = false"
     />
+
+    <div v-if="editingMachine" class="absolute inset-0 z-20 flex flex-col justify-end bg-black/40" @click.self="editingMachine = false">
+      <NumberPad
+        field="weight"
+        :value="machineKg || null"
+        :context="`${data.exercise.name} · peso de la máquina vacía`"
+        :hint="null"
+        action="Guardar"
+        @next="saveMachine"
+        @close="editingMachine = false"
+      />
+    </div>
 
     <OneRepMaxSheet
       v-if="editingOneRepMax"

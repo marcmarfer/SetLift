@@ -5,7 +5,8 @@ import { db } from '../db'
 import { useLive } from '../composables/useLive'
 import { sheetName, sheetOrder } from '../lib/session'
 import { longDay } from '../lib/dates'
-import { estimateOneRepMax, progression } from '../lib/progress'
+import { progression, strengthOf } from '../lib/progress'
+import { machineWeights } from '../lib/preferences'
 import { bySession } from '../lib/upcoming'
 import { bestOneRepMax, previousSession } from '../lib/session'
 import { sessionVolume } from '../lib/plan'
@@ -28,12 +29,13 @@ interface SummaryData {
   sheet: SetEntry[]
   previous: Record<string, SetEntry[]>
   records: Record<string, number>
+  machines: Record<string, number>
 }
 
 const data = useLive<SummaryData>(
   async () => {
     const session = (await db.sessions.get(sessionId.value)) ?? null
-    if (!session) return { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {} }
+    if (!session) return { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {}, machines: {} }
 
     const routine = session.routineId ? (await db.routines.get(session.routineId)) ?? null : null
     const exercises = await db.exercises.toArray()
@@ -48,9 +50,9 @@ const data = useLive<SummaryData>(
       records[id] = await bestOneRepMax(id, session.id, session.date)
     }
 
-    return { session, routine, exercises, sets, sheet, previous, records }
+    return { session, routine, exercises, sets, sheet, previous, records, machines: await machineWeights() }
   },
-  { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {} },
+  { session: null, routine: null, exercises: [], sets: [], sheet: [], previous: {}, records: {}, machines: {} },
   sessionId,
 )
 
@@ -75,10 +77,10 @@ const bestText = (id: string, set: SetEntry | null) =>
 
 const format = (value: number) => String(value).replace('.', ',')
 
-function best(sets: SetEntry[], timed: boolean) {
+function best(sets: SetEntry[], timed: boolean, machine: number) {
   if (sets.length === 0) return null
   const score = (set: SetEntry) =>
-    timed ? (set.weight ?? 0) * 10000 + (set.reps ?? 0) : estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+    timed ? (set.weight ?? 0) * 10000 + (set.reps ?? 0) : strengthOf(set, machine)
   return sets.reduce((a, b) => (score(b) > score(a) ? b : a))
 }
 
@@ -91,11 +93,12 @@ const lines = computed(() => {
   return ids.map((id) => {
     const mine = current.sets.filter((set) => set.exerciseId === id)
     const timed = isTimed(id)
-    const bestNow = best(mine, timed)
-    const bestBefore = best(current.previous[id] ?? [], timed)
+    const machine = current.machines[id] ?? 0
+    const bestNow = best(mine, timed, machine)
+    const bestBefore = best(current.previous[id] ?? [], timed, machine)
 
-    const nowScore = timed ? bestNow?.reps ?? 0 : estimateOneRepMax(bestNow?.weight ?? 0, bestNow?.reps ?? 0)
-    const beforeScore = timed ? bestBefore?.reps ?? 0 : estimateOneRepMax(bestBefore?.weight ?? 0, bestBefore?.reps ?? 0)
+    const nowScore = timed ? bestNow?.reps ?? 0 : bestNow ? strengthOf(bestNow, machine) : 0
+    const beforeScore = timed ? bestBefore?.reps ?? 0 : bestBefore ? strengthOf(bestBefore, machine) : 0
 
     let delta = ''
     if (bestBefore && bestNow && !deload.value) {

@@ -1,6 +1,6 @@
 import { db, newId } from '../db'
 import { addDays, sameWeek, today, weekStart } from './dates'
-import { estimateOneRepMax, progression } from './progress'
+import { progression, strengthOf } from './progress'
 import { forgetDraft, readDraft } from './draft'
 import { entryTarget, startingTemplates } from './targets'
 import { normalGear, storedGear } from './gear'
@@ -54,15 +54,17 @@ export async function bestOneRepMax(exerciseId: string, excludeSessionId?: strin
   const sets = await db.sets.where('exerciseId').equals(exerciseId).toArray()
   const done = sets.filter((set) => set.done && set.sessionId !== excludeSessionId && set.reps)
   const counts = countsBefore(await sheetsOf(done), before)
+  const machine = (await db.exercisePreferences.get(exerciseId))?.machineWeightKg ?? 0
 
   return done
     .filter((set) => counts(set.sessionId))
-    .reduce((best, set) => Math.max(best, estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)), 0)
+    .reduce((best, set) => Math.max(best, strengthOf(set, machine)), 0)
 }
 
 export interface ExerciseHighlights {
   best: { set: SetEntry; date: string } | null
   single: { weight: number; date: string | null } | null
+  machineKg: number
 }
 
 export async function exerciseHighlights(
@@ -76,7 +78,9 @@ export async function exerciseHighlights(
   const done = sets.filter((set) => set.done && set.reps && set.sessionId !== excludeSessionId && counts(set.sessionId))
   const dateOf = (set: SetEntry) => sheets.get(set.sessionId)?.date ?? ''
 
-  const scoreOf = (set: SetEntry) => estimateOneRepMax(set.weight ?? 0, set.reps ?? 0)
+  const manual = await db.exercisePreferences.get(exerciseId)
+  const machineKg = manual?.machineWeightKg ?? 0
+  const scoreOf = (set: SetEntry) => strengthOf(set, machineKg)
   const best = done.reduce<SetEntry | null>((top, set) => {
     if (!top) return set
     const gap = scoreOf(set) - scoreOf(top)
@@ -86,7 +90,6 @@ export async function exerciseHighlights(
   const heaviest = done
     .filter((set) => set.reps === 1 && (set.weight ?? 0) > 0)
     .reduce<SetEntry | null>((top, set) => (!top || (set.weight ?? 0) > (top.weight ?? 0) ? set : top), null)
-  const manual = await db.exercisePreferences.get(exerciseId)
   const single = manual?.manualOneRepMaxKg
     ? { weight: manual.manualOneRepMaxKg, date: manual.manualOneRepMaxDate ?? null }
     : heaviest
@@ -96,6 +99,7 @@ export async function exerciseHighlights(
   return {
     best: best && scoreOf(best) > 0 ? { set: best, date: dateOf(best) } : null,
     single,
+    machineKg,
   }
 }
 

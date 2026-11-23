@@ -6,7 +6,7 @@ import { db, newId, plain } from '../db'
 import { useLive } from '../composables/useLive'
 import { forgetDraft, readDraft, writeDraft } from '../lib/draft'
 import { longDay, shortDate, shortDay, today } from '../lib/dates'
-import { estimateOneRepMax } from '../lib/progress'
+import { strengthOf } from '../lib/progress'
 import { bestOneRepMax, discardIfBlank, exerciseHighlights, exerciseEntries, followRoutine, moveSession, previousSession, removeSession, sessionOn, setDeload, sheetName } from '../lib/session'
 import { dueRoutine, hasTraining, type SheetProgress } from '../lib/plan'
 import type { ExerciseHighlights } from '../lib/session'
@@ -428,7 +428,7 @@ const groups = computed(() => {
       const best = current.session?.deload || timed ? 0 : recordOf(exerciseId)
       const recordIds = new Set(
         sets
-          .filter((set) => set.done && set.reps != null && best > 0 && estimateOneRepMax(set.weight ?? 0, set.reps) > best)
+          .filter((set) => set.done && set.reps != null && best > 0 && strengthOf(set, highlightsOf(exerciseId)?.machineKg) > best)
           .map((set) => set.id),
       )
 
@@ -565,11 +565,11 @@ function suggestion(set: SetEntry, group: { increment: number }) {
   return { reps: set.reps, weight: (set.weight ?? 0) + group.increment }
 }
 
-function record(set: SetEntry, group: { recordIds: Set<string>; record: number }) {
+function record(set: SetEntry, group: { recordIds: Set<string>; record: number; highlights: ExerciseHighlights | null }) {
   if (set.type !== 'single' || !set.done || set.reps == null) return null
   if (!group.recordIds.has(set.id)) return null
 
-  const mark = estimateOneRepMax(set.weight ?? 0, set.reps)
+  const mark = strengthOf(set, group.highlights?.machineKg)
   return { mark, gain: Math.round((mark - group.record) * 100) / 100 }
 }
 
